@@ -9,6 +9,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>CodexTPSTray</RootNamespace>
     <AssemblyName>CodexTPSTray</AssemblyName>
+    <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

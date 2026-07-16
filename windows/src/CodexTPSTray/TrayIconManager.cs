@@ -23,6 +23,7 @@ public class TrayIconManager : IDisposable
     private TraySettings _currentSettings;
     private bool _isShuttingDown;
     private bool _isDisposed;
+    private Icon? _trayIcon;
 
     private readonly ToolStripMenuItem _totalTpsMenuItem = new() { Enabled = false };
     private readonly ToolStripMenuItem _inputTpsMenuItem = new() { Enabled = false };
@@ -138,7 +139,20 @@ public class TrayIconManager : IDisposable
     private void InitializeNotifyIcon()
     {
         _notifyIcon.Text = "Codex TPS";
-        _notifyIcon.Icon = SystemIcons.Application;
+
+        try
+        {
+            string? processPath = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(processPath))
+            {
+                _trayIcon = Icon.ExtractAssociatedIcon(processPath);
+            }
+        }
+        catch
+        {
+        }
+
+        _notifyIcon.Icon = _trayIcon ?? SystemIcons.Application;
         _notifyIcon.Visible = true;
         _notifyIcon.DoubleClick += OnRefreshClicked;
     }
@@ -345,7 +359,9 @@ public class TrayIconManager : IDisposable
             _refreshTimer.Stop();
 
             _notifyIcon.Visible = false;
+            _notifyIcon.Icon = null;
             _notifyIcon.Dispose();
+            _trayIcon?.Dispose();
         }
     }
 }

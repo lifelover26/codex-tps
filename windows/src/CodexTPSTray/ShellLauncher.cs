@@ -14,7 +14,8 @@ public sealed class ShellLauncher : IShellLauncher
                 UseShellExecute = true
             };
 
-            return Process.Start(startInfo) is not null;
+            Process.Start(startInfo);
+            return true;
         }
         catch
         {
