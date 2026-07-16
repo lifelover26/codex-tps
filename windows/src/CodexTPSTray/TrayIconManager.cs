@@ -16,6 +16,8 @@ public class TrayIconManager : IDisposable
     private readonly DispatcherTimer _refreshTimer;
     private readonly SemaphoreSlim _refreshSemaphore;
     private readonly TraySettingsStore _settingsStore;
+    private readonly SessionFolderLauncher _sessionFolderLauncher;
+    private readonly StartupManager _startupManager;
 
     private UsageSnapshot? _latestSnapshot;
     private TraySettings _currentSettings;
@@ -34,18 +36,28 @@ public class TrayIconManager : IDisposable
 
     private readonly Dictionary<MetricWindow, ToolStripMenuItem> _windowMenuItems = new();
     private readonly Dictionary<RefreshCadence, ToolStripMenuItem> _cadenceMenuItems = new();
+    private readonly ToolStripMenuItem _openSessionsFolderMenuItem = new("Open Sessions Folder");
+    private readonly ToolStripMenuItem _launchAtLoginMenuItem = new("Launch at Login") { CheckOnClick = true };
 
-    public TrayIconManager() : this(TraySettingsStore.CreateDefault())
+    public TrayIconManager() : this(
+        TraySettingsStore.CreateDefault(),
+        new SessionScanner(),
+        new ShellLauncher(),
+        new RunKeyStore(),
+        () => Environment.ProcessPath
+    )
     {
     }
 
-    public TrayIconManager(TraySettingsStore settingsStore)
+    public TrayIconManager(TraySettingsStore settingsStore, SessionScanner sessionScanner, IShellLauncher shellLauncher, IRunKeyStore runKeyStore, Func<string?> executablePathProvider)
     {
         _settingsStore = settingsStore;
         _currentSettings = settingsStore.Load();
+        _sessionScanner = sessionScanner;
+        _sessionFolderLauncher = new SessionFolderLauncher(() => sessionScanner.SessionsRoot, shellLauncher);
+        _startupManager = new StartupManager(runKeyStore, executablePathProvider);
 
         _notifyIcon = new NotifyIcon();
-        _sessionScanner = new SessionScanner();
         _refreshTimer = new DispatcherTimer();
         _refreshTimer.Interval = _currentSettings.RefreshCadence.ToTimeSpan();
         _refreshTimer.Tick += OnRefreshTimerTick;
@@ -56,6 +68,7 @@ public class TrayIconManager : IDisposable
     {
         InitializeContextMenu();
         InitializeNotifyIcon();
+        InitializeLaunchAtLoginState();
 
         _refreshTimer.Start();
         _ = RefreshAsync();
@@ -101,6 +114,14 @@ public class TrayIconManager : IDisposable
 
         contextMenu.Items.Add(new ToolStripSeparator());
 
+        _openSessionsFolderMenuItem.Click += OnOpenSessionsFolderClicked;
+        contextMenu.Items.Add(_openSessionsFolderMenuItem);
+
+        _launchAtLoginMenuItem.Click += OnLaunchAtLoginClicked;
+        contextMenu.Items.Add(_launchAtLoginMenuItem);
+
+        contextMenu.Items.Add(new ToolStripSeparator());
+
         var refreshMenuItem = new ToolStripMenuItem("Refresh");
         refreshMenuItem.Click += OnRefreshClicked;
         contextMenu.Items.Add(refreshMenuItem);
@@ -120,6 +141,18 @@ public class TrayIconManager : IDisposable
         _notifyIcon.Icon = SystemIcons.Application;
         _notifyIcon.Visible = true;
         _notifyIcon.DoubleClick += OnRefreshClicked;
+    }
+
+    private void InitializeLaunchAtLoginState()
+    {
+        if (_startupManager.TryGetIsEnabled(out bool isEnabled))
+        {
+            _launchAtLoginMenuItem.Checked = isEnabled;
+        }
+        else
+        {
+            ShowBalloonTip("Failed to read startup settings.", ToolTipIcon.Warning);
+        }
     }
 
     private void OnRefreshTimerTick(object? sender, EventArgs e)
@@ -215,6 +248,52 @@ public class TrayIconManager : IDisposable
         _refreshTimer.Stop();
         _refreshTimer.Interval = cadence.ToTimeSpan();
         _refreshTimer.Start();
+    }
+
+    private void OnOpenSessionsFolderClicked(object? sender, EventArgs e)
+    {
+        if (_isShuttingDown)
+            return;
+
+        if (!_sessionFolderLauncher.OpenSessionsFolder())
+        {
+            ShowBalloonTip("Failed to open sessions folder.", ToolTipIcon.Warning);
+        }
+    }
+
+    private void OnLaunchAtLoginClicked(object? sender, EventArgs e)
+    {
+        if (_isShuttingDown)
+            return;
+
+        bool requestedEnabled = _launchAtLoginMenuItem.Checked;
+        bool success;
+
+        if (requestedEnabled)
+        {
+            success = _startupManager.TryEnable();
+        }
+        else
+        {
+            success = _startupManager.TryDisable();
+        }
+
+        if (!success)
+        {
+            _launchAtLoginMenuItem.Checked = !requestedEnabled;
+            ShowBalloonTip(requestedEnabled ? "Failed to enable launch at login." : "Failed to disable launch at login.", ToolTipIcon.Warning);
+        }
+    }
+
+    private void ShowBalloonTip(string message, ToolTipIcon icon)
+    {
+        try
+        {
+            _notifyIcon.ShowBalloonTip(3000, "Codex TPS", message, icon);
+        }
+        catch
+        {
+        }
     }
 
     private void UpdateMenuCheckmarks()
