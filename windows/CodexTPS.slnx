@@ -5,5 +5,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CodexTPSCore.Tests/CodexTPSCore.Tests.csproj" />
+    <Project Path="tests/CodexTPSTray.Tests/CodexTPSTray.Tests.csproj" />
   </Folder>
 </Solution>

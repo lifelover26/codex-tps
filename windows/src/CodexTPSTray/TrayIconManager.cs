@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -14,21 +15,41 @@ public class TrayIconManager : IDisposable
     private readonly SessionScanner _sessionScanner;
     private readonly DispatcherTimer _refreshTimer;
     private readonly SemaphoreSlim _refreshSemaphore;
-    private readonly ToolStripMenuItem _tpsMenuItem;
-    private readonly ToolStripMenuItem _statusMenuItem;
+    private readonly TraySettingsStore _settingsStore;
+
+    private UsageSnapshot? _latestSnapshot;
+    private TraySettings _currentSettings;
     private bool _isShuttingDown;
     private bool _isDisposed;
 
-    public TrayIconManager()
+    private readonly ToolStripMenuItem _totalTpsMenuItem = new() { Enabled = false };
+    private readonly ToolStripMenuItem _inputTpsMenuItem = new() { Enabled = false };
+    private readonly ToolStripMenuItem _cachedTpsMenuItem = new() { Enabled = false };
+    private readonly ToolStripMenuItem _outputTpsMenuItem = new() { Enabled = false };
+    private readonly ToolStripMenuItem _reasoningTpsMenuItem = new() { Enabled = false };
+    private readonly ToolStripMenuItem _requestsMenuItem = new() { Enabled = false };
+    private readonly ToolStripMenuItem _activeSessionsMenuItem = new() { Enabled = false };
+    private readonly ToolStripMenuItem _cacheRatioMenuItem = new() { Enabled = false };
+    private readonly ToolStripMenuItem _statusMenuItem = new() { Enabled = false };
+
+    private readonly Dictionary<MetricWindow, ToolStripMenuItem> _windowMenuItems = new();
+    private readonly Dictionary<RefreshCadence, ToolStripMenuItem> _cadenceMenuItems = new();
+
+    public TrayIconManager() : this(TraySettingsStore.CreateDefault())
     {
+    }
+
+    public TrayIconManager(TraySettingsStore settingsStore)
+    {
+        _settingsStore = settingsStore;
+        _currentSettings = settingsStore.Load();
+
         _notifyIcon = new NotifyIcon();
         _sessionScanner = new SessionScanner();
         _refreshTimer = new DispatcherTimer();
-        _refreshTimer.Interval = TimeSpan.FromSeconds(5);
+        _refreshTimer.Interval = _currentSettings.RefreshCadence.ToTimeSpan();
         _refreshTimer.Tick += OnRefreshTimerTick;
         _refreshSemaphore = new SemaphoreSlim(1, 1);
-        _tpsMenuItem = new ToolStripMenuItem { Enabled = false };
-        _statusMenuItem = new ToolStripMenuItem { Enabled = false };
     }
 
     public void Start()
@@ -44,8 +65,39 @@ public class TrayIconManager : IDisposable
     {
         var contextMenu = new ContextMenuStrip();
 
-        contextMenu.Items.Add(_tpsMenuItem);
-        contextMenu.Items.Add(_statusMenuItem);
+        var metricsSubmenu = new ToolStripMenuItem("Metrics");
+        metricsSubmenu.DropDownItems.Add(_totalTpsMenuItem);
+        metricsSubmenu.DropDownItems.Add(_inputTpsMenuItem);
+        metricsSubmenu.DropDownItems.Add(_cachedTpsMenuItem);
+        metricsSubmenu.DropDownItems.Add(_outputTpsMenuItem);
+        metricsSubmenu.DropDownItems.Add(_reasoningTpsMenuItem);
+        metricsSubmenu.DropDownItems.Add(_requestsMenuItem);
+        metricsSubmenu.DropDownItems.Add(_activeSessionsMenuItem);
+        metricsSubmenu.DropDownItems.Add(_cacheRatioMenuItem);
+        metricsSubmenu.DropDownItems.Add(_statusMenuItem);
+        contextMenu.Items.Add(metricsSubmenu);
+
+        contextMenu.Items.Add(new ToolStripSeparator());
+
+        var windowSubmenu = new ToolStripMenuItem("Metric Window");
+        foreach (MetricWindow window in Enum.GetValues<MetricWindow>())
+        {
+            var item = new ToolStripMenuItem(window.GetDisplayName());
+            item.Click += (sender, e) => OnMetricWindowSelected(window);
+            _windowMenuItems[window] = item;
+            windowSubmenu.DropDownItems.Add(item);
+        }
+        contextMenu.Items.Add(windowSubmenu);
+
+        var cadenceSubmenu = new ToolStripMenuItem("Refresh Cadence");
+        foreach (RefreshCadence cadence in Enum.GetValues<RefreshCadence>())
+        {
+            var item = new ToolStripMenuItem(cadence.GetDisplayName());
+            item.Click += (sender, e) => OnRefreshCadenceSelected(cadence);
+            _cadenceMenuItems[cadence] = item;
+            cadenceSubmenu.DropDownItems.Add(item);
+        }
+        contextMenu.Items.Add(cadenceSubmenu);
 
         contextMenu.Items.Add(new ToolStripSeparator());
 
@@ -58,6 +110,8 @@ public class TrayIconManager : IDisposable
         contextMenu.Items.Add(exitMenuItem);
 
         _notifyIcon.ContextMenuStrip = contextMenu;
+
+        UpdateMenuCheckmarks();
     }
 
     private void InitializeNotifyIcon()
@@ -98,6 +152,7 @@ public class TrayIconManager : IDisposable
                 if (_isShuttingDown)
                     return;
 
+                _latestSnapshot = snapshot;
                 UpdateUI(snapshot);
             }
             finally
@@ -115,23 +170,64 @@ public class TrayIconManager : IDisposable
         if (_isShuttingDown)
             return;
 
-        double tps = snapshot.OneMinute.TokensPerSecond;
-        string statusText = snapshot.Status switch
-        {
-            CollectionStatus.Ready => "Ready",
-            CollectionStatus.SessionsDirectoryMissing => "No sessions",
-            CollectionStatus.ReadFailed => "Error",
-            _ => "Unknown"
-        };
+        var metrics = _currentSettings.SelectedWindow.GetMetrics(snapshot);
 
-        _tpsMenuItem.Text = $"TPS: {tps:F1}/s";
-        _statusMenuItem.Text = $"Status: {statusText}";
+        _totalTpsMenuItem.Text = $"Total: {metrics.TokensPerSecond:F1} token/s";
+        _inputTpsMenuItem.Text = $"Input: {metrics.InputTokensPerSecond:F1} token/s";
+        _cachedTpsMenuItem.Text = $"Cached: {metrics.CachedInputTokensPerSecond:F1} token/s";
+        _outputTpsMenuItem.Text = $"Output: {metrics.OutputTokensPerSecond:F1} token/s";
+        _reasoningTpsMenuItem.Text = $"Reasoning: {metrics.ReasoningTokensPerSecond:F1} token/s";
+        _requestsMenuItem.Text = $"Requests: {metrics.RequestsPerMinute:F1}/min";
+        _activeSessionsMenuItem.Text = $"Active Sessions: {snapshot.ActiveSessions}";
+        _cacheRatioMenuItem.Text = $"Cache Ratio: {metrics.CacheRatio:P0}";
+        _statusMenuItem.Text = $"Status: {TrayTextFormatter.GetStatusText(snapshot.Status)}";
 
-        string tooltip = $"Codex TPS\nTPS: {tps:F1}/s\nStatus: {statusText}\nActive Sessions: {snapshot.ActiveSessions}";
-        string trayText = tps >= 1 ? $"TPS: {tps:F0}/s" : "No activity";
-
+        string tooltip = TrayTextFormatter.FormatTooltip(snapshot, _currentSettings.SelectedWindow);
         _notifyIcon.Text = tooltip;
-        _notifyIcon.BalloonTipText = trayText;
+    }
+
+    private void OnMetricWindowSelected(MetricWindow window)
+    {
+        if (_isShuttingDown || window == _currentSettings.SelectedWindow)
+            return;
+
+        _currentSettings = _currentSettings with { SelectedWindow = window };
+        _settingsStore.TrySave(_currentSettings);
+
+        UpdateMenuCheckmarks();
+
+        if (_latestSnapshot.HasValue)
+        {
+            UpdateUI(_latestSnapshot.Value);
+        }
+    }
+
+    private void OnRefreshCadenceSelected(RefreshCadence cadence)
+    {
+        if (_isShuttingDown || cadence == _currentSettings.RefreshCadence)
+            return;
+
+        _currentSettings = _currentSettings with { RefreshCadence = cadence };
+        _settingsStore.TrySave(_currentSettings);
+
+        UpdateMenuCheckmarks();
+
+        _refreshTimer.Stop();
+        _refreshTimer.Interval = cadence.ToTimeSpan();
+        _refreshTimer.Start();
+    }
+
+    private void UpdateMenuCheckmarks()
+    {
+        foreach (var kvp in _windowMenuItems)
+        {
+            kvp.Value.Checked = kvp.Key == _currentSettings.SelectedWindow;
+        }
+
+        foreach (var kvp in _cadenceMenuItems)
+        {
+            kvp.Value.Checked = kvp.Key == _currentSettings.RefreshCadence;
+        }
     }
 
     private void OnExitClicked(object? sender, EventArgs e)
