@@ -196,4 +196,89 @@ public class TraySettingsStoreTests : IDisposable
         string[] tempFiles = Directory.GetFiles(_tempDirectory, "*.tmp");
         Assert.Empty(tempFiles);
     }
+
+    [Fact]
+    public void Load_LegacyJsonWithoutLanguage_ReturnsEnglish()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"FiveMinutes\",\"RefreshCadence\":30}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(MetricWindow.FiveMinutes, settings.SelectedWindow);
+        Assert.Equal(RefreshCadence.ThirtySeconds, settings.RefreshCadence);
+        Assert.Equal(Language.English, settings.Language);
+    }
+
+    [Fact]
+    public void Load_ValidEnglishLanguage_ReturnsEnglish()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"FiveMinutes\",\"RefreshCadence\":30,\"Language\":\"English\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(Language.English, settings.Language);
+    }
+
+    [Fact]
+    public void Load_ValidChineseLanguage_ReturnsChinese()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"FiveMinutes\",\"RefreshCadence\":30,\"Language\":\"Chinese\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(Language.Chinese, settings.Language);
+    }
+
+    [Fact]
+    public void Load_InvalidLanguage_FallsBackToEnglish()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"FiveMinutes\",\"RefreshCadence\":30,\"Language\":\"Invalid\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(Language.English, settings.Language);
+    }
+
+    [Fact]
+    public void Load_NullLanguage_FallsBackToEnglish()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"FiveMinutes\",\"RefreshCadence\":30,\"Language\":null}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(Language.English, settings.Language);
+    }
+
+    [Fact]
+    public void TrySave_WithLanguage_SavesAndReloadsEnglish()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(MetricWindow.ThirtyMinutes, RefreshCadence.SixtySeconds, Language.English);
+
+        bool result = store.TrySave(settings);
+
+        Assert.True(result);
+
+        var loaded = store.Load();
+        Assert.Equal(Language.English, loaded.Language);
+    }
+
+    [Fact]
+    public void TrySave_WithLanguage_SavesAndReloadsChinese()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(MetricWindow.ThirtyMinutes, RefreshCadence.SixtySeconds, Language.Chinese);
+
+        bool result = store.TrySave(settings);
+
+        Assert.True(result);
+
+        var loaded = store.Load();
+        Assert.Equal(Language.Chinese, loaded.Language);
+    }
 }

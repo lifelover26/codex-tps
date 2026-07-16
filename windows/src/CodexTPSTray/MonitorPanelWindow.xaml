@@ -1,0 +1,224 @@
+<Window x:Class="CodexTPSTray.MonitorPanelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="390"
+        SizeToContent="Height"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Focusable="True"
+        Background="White"
+        Foreground="#1A1A1A"
+        FontFamily="Segoe UI, Arial"
+        FontSize="12">
+
+    <Window.Resources>
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6 2"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="#999999"/>
+                    <Setter Property="Background" Value="#F5F5F5"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="#007AFF"/>
+                </Trigger>
+                <Trigger Property="IsFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="#007AFF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="Padding" Value="6 4"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#E8F0FE"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#007AFF"/>
+                    <Setter Property="Foreground" Value="White"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="#999999"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" BorderBrush="#E5E5E5" BorderThickness="0 0 0 1" Padding="0 0 0 8" Margin="0 0 0 8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Image Grid.Column="0" Width="32" Height="32" Margin="0 0 10 0" Source="pack://application:,,,/CodexTPSTray;component/Resources/AppIcon.png" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                <StackPanel Grid.Column="1" Orientation="Vertical">
+                    <TextBlock Text="Codex TPS" FontSize="16" FontWeight="SemiBold"/>
+                    <StackPanel Orientation="Horizontal" Margin="0 2 0 0">
+                        <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="#34C759" Margin="0 2 6 0"/>
+                        <TextBlock x:Name="StatusText" Text="Waiting..." FontSize="12" Foreground="#666666"/>
+                        <TextBlock Text=" | " FontSize="12" Foreground="#CCCCCC"/>
+                        <TextBlock x:Name="LastUpdateTimeText" Text="" FontSize="12" Foreground="#666666"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <Button Grid.Column="2" x:Name="RefreshButton" Width="32" Height="32" Margin="4"
+                        Background="Transparent" BorderThickness="0"
+                        Click="RefreshButton_Click">
+                    <Button.ToolTip>
+                        <ToolTip x:Name="RefreshTooltip" Content="Refresh"/>
+                    </Button.ToolTip>
+                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE72C;" Foreground="#666666"/>
+                </Button>
+
+                <Button Grid.Column="3" x:Name="OpenFolderButton" Width="32" Height="32" Margin="4"
+                        Background="Transparent" BorderThickness="0"
+                        Click="OpenFolderButton_Click">
+                    <Button.ToolTip>
+                        <ToolTip x:Name="OpenFolderTooltip" Content="Open Sessions Folder"/>
+                    </Button.ToolTip>
+                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE838;" Foreground="#666666"/>
+                </Button>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Margin="0 4 0 4" Background="#F5F5F5" CornerRadius="4">
+            <UniformGrid Columns="4">
+                <Button x:Name="Window1MinButton" Content="1 min" Margin="0" Padding="8 6"
+                        Background="Transparent" BorderThickness="0"
+                        Click="WindowButton_Click" Tag="OneMinute" FontSize="12"
+                        HorizontalContentAlignment="Center"/>
+                <Button x:Name="Window5MinButton" Content="5 min" Margin="0" Padding="8 6"
+                        Background="Transparent" BorderThickness="0"
+                        Click="WindowButton_Click" Tag="FiveMinutes" FontSize="12"
+                        HorizontalContentAlignment="Center"/>
+                <Button x:Name="Window30MinButton" Content="30 min" Margin="0" Padding="8 6"
+                        Background="Transparent" BorderThickness="0"
+                        Click="WindowButton_Click" Tag="ThirtyMinutes" FontSize="12"
+                        HorizontalContentAlignment="Center"/>
+                <Button x:Name="Window1HourButton" Content="1 hour" Margin="0" Padding="8 6"
+                        Background="Transparent" BorderThickness="0"
+                        Click="WindowButton_Click" Tag="OneHour" FontSize="12"
+                        HorizontalContentAlignment="Center"/>
+            </UniformGrid>
+        </Border>
+
+        <Border Grid.Row="2" BorderBrush="#E5E5E5" BorderThickness="0 0 0 1" Padding="0 0 0 8" Margin="0 4 0 4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Vertical" HorizontalAlignment="Left">
+                    <TextBlock x:Name="TotalTpsValue" Text="0" FontSize="36" FontWeight="Bold" Foreground="#1A1A1A"/>
+                    <TextBlock x:Name="TokenPerSecondLabel" Text="token/s" FontSize="11" Foreground="#666666"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                    <TextBlock x:Name="RequestsValue" Text="0" FontSize="20" FontWeight="SemiBold" Foreground="#1A1A1A" TextAlignment="Right"/>
+                    <TextBlock x:Name="RequestsPerMinuteLabel" Text="Requests/min" FontSize="11" Foreground="#666666" TextAlignment="Right"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="3" Margin="0 4 0 4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Vertical" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Ellipse Width="6" Height="6" Fill="#007AFF" Margin="0 0 4 0"/>
+                    <TextBlock x:Name="InputLabel" Text="Input" FontSize="11" Foreground="#666666"/>
+                </StackPanel>
+                <TextBlock x:Name="InputValue" Text="0" FontSize="14" FontWeight="Medium" Foreground="#1A1A1A"/>
+                <TextBlock Text="token/s" FontSize="10" Foreground="#999999"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Ellipse Width="6" Height="6" Fill="#34C759" Margin="0 0 4 0"/>
+                    <TextBlock x:Name="CachedLabel" Text="Cached" FontSize="11" Foreground="#666666"/>
+                </StackPanel>
+                <TextBlock x:Name="CachedValue" Text="0" FontSize="14" FontWeight="Medium" Foreground="#1A1A1A"/>
+                <TextBlock Text="token/s" FontSize="10" Foreground="#999999"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Orientation="Vertical" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Ellipse Width="6" Height="6" Fill="#FF9500" Margin="0 0 4 0"/>
+                    <TextBlock x:Name="OutputLabel" Text="Output" FontSize="11" Foreground="#666666"/>
+                </StackPanel>
+                <TextBlock x:Name="OutputValue" Text="0" FontSize="14" FontWeight="Medium" Foreground="#1A1A1A"/>
+                <TextBlock Text="token/s" FontSize="10" Foreground="#999999"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="3" Orientation="Vertical" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Ellipse Width="6" Height="6" Fill="#AF52DE" Margin="0 0 4 0"/>
+                    <TextBlock x:Name="ReasoningLabel" Text="Reasoning" FontSize="11" Foreground="#666666"/>
+                </StackPanel>
+                <TextBlock x:Name="ReasoningValue" Text="0" FontSize="14" FontWeight="Medium" Foreground="#1A1A1A"/>
+                <TextBlock Text="token/s" FontSize="10" Foreground="#999999"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="4" Margin="0 4 0 0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Vertical" HorizontalAlignment="Left">
+                <TextBlock x:Name="ActiveSessionsLabel" Text="Active Sessions" FontSize="11" Foreground="#666666"/>
+                <TextBlock x:Name="ActiveSessionsValue" Text="0" FontSize="16" FontWeight="SemiBold" Foreground="#1A1A1A"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Left">
+                <TextBlock x:Name="CacheRatioLabel" Text="Cache Ratio" FontSize="11" Foreground="#666666"/>
+                <TextBlock x:Name="CacheRatioValue" Text="0%" FontSize="16" FontWeight="SemiBold" Foreground="#1A1A1A"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                <TextBlock x:Name="RefreshCadenceLabel" Text="Refresh:" FontSize="11" Foreground="#666666" Margin="0 0 6 0" VerticalAlignment="Center"/>
+                <ComboBox x:Name="RefreshCadenceCombo" Width="78" Height="22"
+                          SelectionChanged="RefreshCadenceCombo_SelectionChanged">
+                    <ComboBoxItem Tag="FiveSeconds">5 sec</ComboBoxItem>
+                    <ComboBoxItem Tag="FifteenSeconds">15 sec</ComboBoxItem>
+                    <ComboBoxItem Tag="ThirtySeconds">30 sec</ComboBoxItem>
+                    <ComboBoxItem Tag="SixtySeconds">60 sec</ComboBoxItem>
+                </ComboBox>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

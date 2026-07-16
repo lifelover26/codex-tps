@@ -61,6 +61,39 @@ Settings are stored per-user at:
 %LOCALAPPDATA%\CodexTPS\settings.json
 ```
 
+## Usage
+
+### Metrics Panel
+
+- **Left-click** the tray icon to toggle the metrics panel (show/hide)
+- The panel remains visible regardless of focus or clicks elsewhere
+- **Left-click** again to hide the panel
+- **Escape** hides the panel while it has focus
+- **Right-click** the tray icon to open the command menu
+
+### Metric Window
+
+The metrics panel displays token throughput over selectable time windows:
+
+- **1 min** - Shows metrics from the last 60 seconds
+- **5 min** - Shows metrics from the last 5 minutes
+- **30 min** - Shows metrics from the last 30 minutes
+- **1 hour** - Shows metrics from the last hour
+
+### Panel Controls
+
+- **Refresh button** - Manually refresh metrics
+- **Open Sessions Folder** - Open the Codex sessions directory
+- **Refresh Cadence** - Select automatic refresh interval (5-60 seconds)
+
+**Note:** Exit and Launch at Login are available only in the right-click tray menu.
+
+### Language
+
+- **Language / 语言** submenu in the right-click tray menu allows switching between English and 简体中文
+- Changing language updates all UI elements immediately
+- Language preference is persisted in settings
+
 ## Launch at Login
 
 The "Launch at Login" menu option writes the current executable path to the current-user Run key in the registry.

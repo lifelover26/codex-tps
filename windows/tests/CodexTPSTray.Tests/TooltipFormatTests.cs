@@ -141,6 +141,80 @@ public class TooltipFormatTests
         }
     }
 
+    [Fact]
+    public void FormatTooltip_English_NeverExceeds63Characters()
+    {
+        var snapshot = CreateSnapshot(
+            tps: 9999.9,
+            status: CollectionStatus.SessionsDirectoryMissing,
+            activeSessions: 999
+        );
+
+        foreach (MetricWindow window in Enum.GetValues<MetricWindow>())
+        {
+            string result = TrayTextFormatter.FormatTooltip(snapshot, window, Language.English);
+            Assert.True(result.Length <= 63, $"English tooltip exceeds 63 chars for {window}: '{result}' (length: {result.Length})");
+        }
+    }
+
+    [Fact]
+    public void FormatTooltip_Chinese_NeverExceeds63Characters()
+    {
+        var snapshot = CreateSnapshot(
+            tps: 9999.9,
+            status: CollectionStatus.SessionsDirectoryMissing,
+            activeSessions: 999
+        );
+
+        foreach (MetricWindow window in Enum.GetValues<MetricWindow>())
+        {
+            string result = TrayTextFormatter.FormatTooltip(snapshot, window, Language.Chinese);
+            Assert.True(result.Length <= 63, $"Chinese tooltip exceeds 63 chars for {window}: '{result}' (length: {result.Length})");
+        }
+    }
+
+    [Fact]
+    public void FormatTooltip_EnglishStatusText()
+    {
+        var snapshot = CreateSnapshot(
+            tps: 100.0,
+            status: CollectionStatus.Ready,
+            activeSessions: 5
+        );
+
+        string result = TrayTextFormatter.FormatTooltip(snapshot, MetricWindow.OneMinute, Language.English);
+        Assert.Contains("Ready", result);
+        Assert.True(result.Length <= 63);
+    }
+
+    [Fact]
+    public void FormatTooltip_ChineseStatusText()
+    {
+        var snapshot = CreateSnapshot(
+            tps: 100.0,
+            status: CollectionStatus.Ready,
+            activeSessions: 5
+        );
+
+        string result = TrayTextFormatter.FormatTooltip(snapshot, MetricWindow.OneMinute, Language.Chinese);
+        Assert.Contains("就绪", result);
+        Assert.True(result.Length <= 63);
+    }
+
+    [Fact]
+    public void FormatTooltip_ChineseNoSessionsStatus()
+    {
+        var snapshot = CreateSnapshot(
+            tps: 0.0,
+            status: CollectionStatus.SessionsDirectoryMissing,
+            activeSessions: 0
+        );
+
+        string result = TrayTextFormatter.FormatTooltip(snapshot, MetricWindow.OneMinute, Language.Chinese);
+        Assert.Contains("未找到会话目录", result);
+        Assert.True(result.Length <= 63);
+    }
+
     private static UsageSnapshot CreateSnapshot(double tps, CollectionStatus status, int activeSessions)
     {
         var metrics = new WindowMetrics(

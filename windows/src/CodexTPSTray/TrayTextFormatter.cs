@@ -11,13 +11,18 @@ public static class TrayTextFormatter
 
     public static string FormatTooltip(UsageSnapshot? snapshot, MetricWindow window)
     {
+        return FormatTooltip(snapshot, window, Language.English);
+    }
+
+    public static string FormatTooltip(UsageSnapshot? snapshot, MetricWindow window, Language language)
+    {
         if (!snapshot.HasValue)
         {
             return "Codex TPS";
         }
 
         var metrics = window.GetMetrics(snapshot.Value);
-        string statusText = GetStatusText(snapshot.Value.Status);
+        string statusText = Localization.GetStatusText(snapshot.Value.Status, false, snapshot.Value.MalformedRelevantLines, true, language);
         string windowText = GetWindowShortText(window);
 
         double tps = metrics.TokensPerSecond;
@@ -26,7 +31,8 @@ public static class TrayTextFormatter
         string tpsPart = FormatTps(tps);
         string sessionsPart = activeSessions.ToString(InvariantCulture);
 
-        string tooltip = $"TPS: {tpsPart}/s | {windowText} | {statusText} | {sessionsPart} sessions";
+        string sessionsLabel = language == Language.Chinese ? "会话" : "sessions";
+        string tooltip = $"TPS: {tpsPart}/s | {windowText} | {statusText} | {sessionsPart} {sessionsLabel}";
 
         if (tooltip.Length <= MaxTooltipLength)
         {

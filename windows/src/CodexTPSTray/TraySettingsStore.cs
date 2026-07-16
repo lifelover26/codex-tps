@@ -43,8 +43,9 @@ public class TraySettingsStore
 
             MetricWindow window = ParseMetricWindow(raw?.SelectedWindow);
             RefreshCadence cadence = ParseRefreshCadence(raw?.RefreshCadence);
+            Language language = ParseLanguage(raw?.Language);
 
-            return new TraySettings(window, cadence);
+            return new TraySettings(window, cadence, language);
         }
         catch
         {
@@ -137,10 +138,26 @@ public class TraySettingsStore
         return RefreshCadenceExtensions.FromSeconds(value.Value);
     }
 
+    private static Language ParseLanguage(string? value)
+    {
+        if (value == null)
+        {
+            return TraySettings.Default.Language;
+        }
+
+        if (Enum.TryParse<Language>(value, ignoreCase: true, out var language) && Enum.IsDefined(language))
+        {
+            return language;
+        }
+
+        return TraySettings.Default.Language;
+    }
+
     private sealed class RawSettingsDto
     {
         public string? SelectedWindow { get; set; }
         public int? RefreshCadence { get; set; }
+        public string? Language { get; set; }
 
         public RawSettingsDto()
         {
@@ -150,6 +167,7 @@ public class TraySettingsStore
         {
             SelectedWindow = settings.SelectedWindow.ToString();
             RefreshCadence = (int)settings.RefreshCadence;
+            Language = settings.Language.ToString();
         }
     }
 }

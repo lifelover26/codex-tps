@@ -16,4 +16,10 @@
     <ProjectReference Include="..\CodexTPSCore\CodexTPSCore.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Resource Include="../../../Resources/AppIcon.png">
+      <Link>Resources/AppIcon.png</Link>
+    </Resource>
+  </ItemGroup>
+
 </Project>

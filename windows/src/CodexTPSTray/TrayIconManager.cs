@@ -19,6 +19,9 @@ public class TrayIconManager : IDisposable
     private readonly SessionFolderLauncher _sessionFolderLauncher;
     private readonly StartupManager _startupManager;
 
+    private MonitorPanelWindow? _monitorPanel;
+    private MonitorPanelViewModel? _monitorPanelViewModel;
+
     private UsageSnapshot? _latestSnapshot;
     private TraySettings _currentSettings;
     private bool _isShuttingDown;
@@ -37,8 +40,18 @@ public class TrayIconManager : IDisposable
 
     private readonly Dictionary<MetricWindow, ToolStripMenuItem> _windowMenuItems = new();
     private readonly Dictionary<RefreshCadence, ToolStripMenuItem> _cadenceMenuItems = new();
-    private readonly ToolStripMenuItem _openSessionsFolderMenuItem = new("Open Sessions Folder");
-    private readonly ToolStripMenuItem _launchAtLoginMenuItem = new("Launch at Login") { CheckOnClick = true };
+    private readonly ToolStripMenuItem _openSessionsFolderMenuItem = new();
+    private readonly ToolStripMenuItem _launchAtLoginMenuItem = new() { CheckOnClick = true };
+
+    private readonly ToolStripMenuItem _englishLanguageMenuItem = new();
+    private readonly ToolStripMenuItem _chineseLanguageMenuItem = new();
+
+    private readonly ToolStripMenuItem _metricsSubmenu = new();
+    private readonly ToolStripMenuItem _metricWindowSubmenu = new();
+    private readonly ToolStripMenuItem _refreshCadenceSubmenu = new();
+    private readonly ToolStripMenuItem _languageSubmenu = new();
+    private readonly ToolStripMenuItem _refreshMenuItem = new();
+    private readonly ToolStripMenuItem _exitMenuItem = new();
 
     public TrayIconManager() : this(
         TraySettingsStore.CreateDefault(),
@@ -63,6 +76,8 @@ public class TrayIconManager : IDisposable
         _refreshTimer.Interval = _currentSettings.RefreshCadence.ToTimeSpan();
         _refreshTimer.Tick += OnRefreshTimerTick;
         _refreshSemaphore = new SemaphoreSlim(1, 1);
+
+        _monitorPanelViewModel = new MonitorPanelViewModel(_currentSettings);
     }
 
     public void Start()
@@ -79,57 +94,73 @@ public class TrayIconManager : IDisposable
     {
         var contextMenu = new ContextMenuStrip();
 
-        var metricsSubmenu = new ToolStripMenuItem("Metrics");
-        metricsSubmenu.DropDownItems.Add(_totalTpsMenuItem);
-        metricsSubmenu.DropDownItems.Add(_inputTpsMenuItem);
-        metricsSubmenu.DropDownItems.Add(_cachedTpsMenuItem);
-        metricsSubmenu.DropDownItems.Add(_outputTpsMenuItem);
-        metricsSubmenu.DropDownItems.Add(_reasoningTpsMenuItem);
-        metricsSubmenu.DropDownItems.Add(_requestsMenuItem);
-        metricsSubmenu.DropDownItems.Add(_activeSessionsMenuItem);
-        metricsSubmenu.DropDownItems.Add(_cacheRatioMenuItem);
-        metricsSubmenu.DropDownItems.Add(_statusMenuItem);
-        contextMenu.Items.Add(metricsSubmenu);
+        _metricsSubmenu.Text = Localization.MetricsMenu(_currentSettings.Language);
+        _metricsSubmenu.DropDownItems.Add(_totalTpsMenuItem);
+        _metricsSubmenu.DropDownItems.Add(_inputTpsMenuItem);
+        _metricsSubmenu.DropDownItems.Add(_cachedTpsMenuItem);
+        _metricsSubmenu.DropDownItems.Add(_outputTpsMenuItem);
+        _metricsSubmenu.DropDownItems.Add(_reasoningTpsMenuItem);
+        _metricsSubmenu.DropDownItems.Add(_requestsMenuItem);
+        _metricsSubmenu.DropDownItems.Add(_activeSessionsMenuItem);
+        _metricsSubmenu.DropDownItems.Add(_cacheRatioMenuItem);
+        _metricsSubmenu.DropDownItems.Add(_statusMenuItem);
+        contextMenu.Items.Add(_metricsSubmenu);
 
         contextMenu.Items.Add(new ToolStripSeparator());
 
-        var windowSubmenu = new ToolStripMenuItem("Metric Window");
+        _metricWindowSubmenu.Text = Localization.MetricWindowMenu(_currentSettings.Language);
         foreach (MetricWindow window in Enum.GetValues<MetricWindow>())
         {
-            var item = new ToolStripMenuItem(window.GetDisplayName());
+            var item = new ToolStripMenuItem(Localization.GetMetricWindowDisplayName(window, _currentSettings.Language));
             item.Click += (sender, e) => OnMetricWindowSelected(window);
             _windowMenuItems[window] = item;
-            windowSubmenu.DropDownItems.Add(item);
+            _metricWindowSubmenu.DropDownItems.Add(item);
         }
-        contextMenu.Items.Add(windowSubmenu);
+        contextMenu.Items.Add(_metricWindowSubmenu);
 
-        var cadenceSubmenu = new ToolStripMenuItem("Refresh Cadence");
+        _refreshCadenceSubmenu.Text = Localization.RefreshCadenceMenu(_currentSettings.Language);
         foreach (RefreshCadence cadence in Enum.GetValues<RefreshCadence>())
         {
-            var item = new ToolStripMenuItem(cadence.GetDisplayName());
+            var item = new ToolStripMenuItem(Localization.GetRefreshCadenceDisplayName(cadence, _currentSettings.Language));
             item.Click += (sender, e) => OnRefreshCadenceSelected(cadence);
             _cadenceMenuItems[cadence] = item;
-            cadenceSubmenu.DropDownItems.Add(item);
+            _refreshCadenceSubmenu.DropDownItems.Add(item);
         }
-        contextMenu.Items.Add(cadenceSubmenu);
+        contextMenu.Items.Add(_refreshCadenceSubmenu);
 
         contextMenu.Items.Add(new ToolStripSeparator());
 
+        _openSessionsFolderMenuItem.Text = Localization.OpenSessionsFolderMenu(_currentSettings.Language);
         _openSessionsFolderMenuItem.Click += OnOpenSessionsFolderClicked;
         contextMenu.Items.Add(_openSessionsFolderMenuItem);
 
+        _launchAtLoginMenuItem.Text = Localization.LaunchAtLogin(_currentSettings.Language);
         _launchAtLoginMenuItem.Click += OnLaunchAtLoginClicked;
         contextMenu.Items.Add(_launchAtLoginMenuItem);
 
         contextMenu.Items.Add(new ToolStripSeparator());
 
-        var refreshMenuItem = new ToolStripMenuItem("Refresh");
-        refreshMenuItem.Click += OnRefreshClicked;
-        contextMenu.Items.Add(refreshMenuItem);
+        _languageSubmenu.Text = Localization.LanguageMenu(_currentSettings.Language);
 
-        var exitMenuItem = new ToolStripMenuItem("Exit");
-        exitMenuItem.Click += OnExitClicked;
-        contextMenu.Items.Add(exitMenuItem);
+        _englishLanguageMenuItem.Text = "English";
+        _englishLanguageMenuItem.Click += (sender, e) => OnLanguageSelected(Language.English);
+        _languageSubmenu.DropDownItems.Add(_englishLanguageMenuItem);
+
+        _chineseLanguageMenuItem.Text = "简体中文";
+        _chineseLanguageMenuItem.Click += (sender, e) => OnLanguageSelected(Language.Chinese);
+        _languageSubmenu.DropDownItems.Add(_chineseLanguageMenuItem);
+
+        contextMenu.Items.Add(_languageSubmenu);
+
+        contextMenu.Items.Add(new ToolStripSeparator());
+
+        _refreshMenuItem.Text = Localization.RefreshMenu(_currentSettings.Language);
+        _refreshMenuItem.Click += OnRefreshClicked;
+        contextMenu.Items.Add(_refreshMenuItem);
+
+        _exitMenuItem.Text = Localization.ExitMenu(_currentSettings.Language);
+        _exitMenuItem.Click += OnExitClicked;
+        contextMenu.Items.Add(_exitMenuItem);
 
         _notifyIcon.ContextMenuStrip = contextMenu;
 
@@ -154,7 +185,7 @@ public class TrayIconManager : IDisposable
 
         _notifyIcon.Icon = _trayIcon ?? SystemIcons.Application;
         _notifyIcon.Visible = true;
-        _notifyIcon.DoubleClick += OnRefreshClicked;
+        _notifyIcon.MouseClick += OnNotifyIconMouseClick;
     }
 
     private void InitializeLaunchAtLoginState()
@@ -165,7 +196,7 @@ public class TrayIconManager : IDisposable
         }
         else
         {
-            ShowBalloonTip("Failed to read startup settings.", ToolTipIcon.Warning);
+            ShowBalloonTip(Localization.FailedToReadStartupSettings(_currentSettings.Language), ToolTipIcon.Warning);
         }
     }
 
@@ -177,6 +208,119 @@ public class TrayIconManager : IDisposable
     private void OnRefreshClicked(object? sender, EventArgs e)
     {
         _ = RefreshAsync();
+    }
+
+    private void OnNotifyIconMouseClick(object? sender, MouseEventArgs e)
+    {
+        if (_isShuttingDown)
+            return;
+
+        if (e.Button != MouseButtons.Left)
+            return;
+
+        if (_monitorPanel == null)
+        {
+            _monitorPanel = new MonitorPanelWindow(_monitorPanelViewModel!);
+            _monitorPanel.RefreshRequested += () => _ = RefreshAsync();
+            _monitorPanel.OpenFolderRequested += () => OnOpenSessionsFolderClicked(null, EventArgs.Empty);
+            _monitorPanel.MetricWindowChanged += OnMetricWindowSelected;
+            _monitorPanel.RefreshCadenceChanged += OnRefreshCadenceSelected;
+        }
+
+        if (_monitorPanel.IsVisible)
+        {
+            _monitorPanel.Hide();
+        }
+        else
+        {
+            if (_latestSnapshot.HasValue)
+            {
+                _monitorPanel.UpdateSnapshot(_latestSnapshot.Value);
+            }
+
+            _monitorPanel.ShowNearTray();
+        }
+    }
+
+    private void OnLanguageSelected(Language language)
+    {
+        if (_isShuttingDown)
+            return;
+
+        if (language == _currentSettings.Language)
+        {
+            UpdateMenuCheckmarks();
+            return;
+        }
+
+        _currentSettings = _currentSettings with { Language = language };
+        _settingsStore.TrySave(_currentSettings);
+
+        UpdateMenuLocalization();
+        UpdateMenuCheckmarks();
+        _monitorPanel?.UpdateSettings(_currentSettings);
+
+        if (_latestSnapshot.HasValue)
+        {
+            UpdateUI(_latestSnapshot.Value);
+        }
+    }
+
+    private void UpdateMenuLocalization()
+    {
+        var language = _currentSettings.Language;
+
+        foreach (var kvp in _windowMenuItems)
+        {
+            kvp.Value.Text = Localization.GetMetricWindowDisplayName(kvp.Key, language);
+        }
+
+        foreach (var kvp in _cadenceMenuItems)
+        {
+            kvp.Value.Text = Localization.GetRefreshCadenceDisplayName(kvp.Key, language);
+        }
+
+        _metricsSubmenu.Text = Localization.MetricsMenu(language);
+        _metricWindowSubmenu.Text = Localization.MetricWindowMenu(language);
+        _refreshCadenceSubmenu.Text = Localization.RefreshCadenceMenu(language);
+        _languageSubmenu.Text = Localization.LanguageMenu(language);
+        _refreshMenuItem.Text = Localization.RefreshMenu(language);
+        _exitMenuItem.Text = Localization.ExitMenu(language);
+
+        _openSessionsFolderMenuItem.Text = Localization.OpenSessionsFolderMenu(language);
+        _launchAtLoginMenuItem.Text = Localization.LaunchAtLogin(language);
+    }
+
+    private void OnLaunchAtLoginRequested(bool enabled)
+    {
+        if (_isShuttingDown)
+            return;
+
+        bool success;
+
+        if (enabled)
+        {
+            success = _startupManager.TryEnable();
+        }
+        else
+        {
+            success = _startupManager.TryDisable();
+        }
+
+        if (!success)
+        {
+            _launchAtLoginMenuItem.Checked = !enabled;
+            ShowBalloonTip(
+                enabled
+                    ? Localization.FailedToEnableLaunchAtLogin(_currentSettings.Language)
+                    : Localization.FailedToDisableLaunchAtLogin(_currentSettings.Language),
+                ToolTipIcon.Warning
+            );
+        }
+        else
+        {
+            _launchAtLoginMenuItem.Checked = enabled;
+        }
     }
 
     private async Task RefreshAsync()
@@ -194,13 +338,27 @@ public class TrayIconManager : IDisposable
                 if (_isShuttingDown)
                     return;
 
-                var snapshot = await Task.Run(() => _sessionScanner.Refresh(DateTimeOffset.UtcNow));
+                _monitorPanel?.SetIsRefreshing(true);
 
-                if (_isShuttingDown)
-                    return;
+                try
+                {
+                    var snapshot = await Task.Run(() => _sessionScanner.Refresh(DateTimeOffset.UtcNow));
 
-                _latestSnapshot = snapshot;
-                UpdateUI(snapshot);
+                    if (_isShuttingDown)
+                        return;
+
+                    _latestSnapshot = snapshot;
+                    UpdateUI(snapshot);
+
+                    _monitorPanel?.UpdateSnapshot(snapshot);
+                }
+                finally
+                {
+                    if (!_isShuttingDown)
+                    {
+                        _monitorPanel?.SetIsRefreshing(false);
+                    }
+                }
             }
             finally
             {
@@ -209,6 +367,10 @@ public class TrayIconManager : IDisposable
         }
         catch
         {
+            if (!_isShuttingDown)
+            {
+                _monitorPanel?.SetIsRefreshing(false);
+            }
         }
     }
 
@@ -218,18 +380,19 @@ public class TrayIconManager : IDisposable
             return;
 
         var metrics = _currentSettings.SelectedWindow.GetMetrics(snapshot);
+        var language = _currentSettings.Language;
 
-        _totalTpsMenuItem.Text = $"Total: {metrics.TokensPerSecond:F1} token/s";
-        _inputTpsMenuItem.Text = $"Input: {metrics.InputTokensPerSecond:F1} token/s";
-        _cachedTpsMenuItem.Text = $"Cached: {metrics.CachedInputTokensPerSecond:F1} token/s";
-        _outputTpsMenuItem.Text = $"Output: {metrics.OutputTokensPerSecond:F1} token/s";
-        _reasoningTpsMenuItem.Text = $"Reasoning: {metrics.ReasoningTokensPerSecond:F1} token/s";
-        _requestsMenuItem.Text = $"Requests: {metrics.RequestsPerMinute:F1}/min";
-        _activeSessionsMenuItem.Text = $"Active Sessions: {snapshot.ActiveSessions}";
-        _cacheRatioMenuItem.Text = $"Cache Ratio: {metrics.CacheRatio:P0}";
-        _statusMenuItem.Text = $"Status: {TrayTextFormatter.GetStatusText(snapshot.Status)}";
+        _totalTpsMenuItem.Text = $"{Localization.Total(language)}: {metrics.TokensPerSecond:F1} token/s";
+        _inputTpsMenuItem.Text = $"{Localization.Input(language)}: {metrics.InputTokensPerSecond:F1} token/s";
+        _cachedTpsMenuItem.Text = $"{Localization.Cached(language)}: {metrics.CachedInputTokensPerSecond:F1} token/s";
+        _outputTpsMenuItem.Text = $"{Localization.Output(language)}: {metrics.OutputTokensPerSecond:F1} token/s";
+        _reasoningTpsMenuItem.Text = $"{Localization.Reasoning(language)}: {metrics.ReasoningTokensPerSecond:F1} token/s";
+        _requestsMenuItem.Text = $"{Localization.RequestsPerMinute(language)}: {metrics.RequestsPerMinute:F1}/min";
+        _activeSessionsMenuItem.Text = $"{Localization.ActiveSessions(language)}: {snapshot.ActiveSessions}";
+        _cacheRatioMenuItem.Text = $"{Localization.CacheRatio(language)}: {metrics.CacheRatio:P0}";
+        _statusMenuItem.Text = $"{Localization.Status(language)}: {Localization.GetStatusText(snapshot.Status, false, snapshot.MalformedRelevantLines, true, language)}";
 
-        string tooltip = TrayTextFormatter.FormatTooltip(snapshot, _currentSettings.SelectedWindow);
+        string tooltip = TrayTextFormatter.FormatTooltip(snapshot, _currentSettings.SelectedWindow, language);
         _notifyIcon.Text = tooltip;
     }
 
@@ -242,6 +405,7 @@ public class TrayIconManager : IDisposable
         _settingsStore.TrySave(_currentSettings);
 
         UpdateMenuCheckmarks();
+        _monitorPanel?.UpdateSettings(_currentSettings);
 
         if (_latestSnapshot.HasValue)
         {
@@ -258,6 +422,7 @@ public class TrayIconManager : IDisposable
         _settingsStore.TrySave(_currentSettings);
 
         UpdateMenuCheckmarks();
+        _monitorPanel?.UpdateSettings(_currentSettings);
 
         _refreshTimer.Stop();
         _refreshTimer.Interval = cadence.ToTimeSpan();
@@ -271,7 +436,7 @@ public class TrayIconManager : IDisposable
 
         if (!_sessionFolderLauncher.OpenSessionsFolder())
         {
-            ShowBalloonTip("Failed to open sessions folder.", ToolTipIcon.Warning);
+            ShowBalloonTip(Localization.FailedToOpenSessionsFolder(_currentSettings.Language), ToolTipIcon.Warning);
         }
     }
 
@@ -295,7 +460,12 @@ public class TrayIconManager : IDisposable
         if (!success)
         {
             _launchAtLoginMenuItem.Checked = !requestedEnabled;
-            ShowBalloonTip(requestedEnabled ? "Failed to enable launch at login." : "Failed to disable launch at login.", ToolTipIcon.Warning);
+            ShowBalloonTip(
+                requestedEnabled
+                    ? Localization.FailedToEnableLaunchAtLogin(_currentSettings.Language)
+                    : Localization.FailedToDisableLaunchAtLogin(_currentSettings.Language),
+                ToolTipIcon.Warning
+            );
         }
     }
 
@@ -321,6 +491,9 @@ public class TrayIconManager : IDisposable
         {
             kvp.Value.Checked = kvp.Key == _currentSettings.RefreshCadence;
         }
+
+        _englishLanguageMenuItem.Checked = _currentSettings.Language == Language.English;
+        _chineseLanguageMenuItem.Checked = _currentSettings.Language == Language.Chinese;
     }
 
     private void OnExitClicked(object? sender, EventArgs e)
@@ -336,6 +509,8 @@ public class TrayIconManager : IDisposable
         _isShuttingDown = true;
 
         _refreshTimer.Stop();
+
+        _monitorPanel?.PrepareForShutdown();
 
         System.Windows.Application.Current.Shutdown();
     }
@@ -357,6 +532,9 @@ public class TrayIconManager : IDisposable
         if (disposing)
         {
             _refreshTimer.Stop();
+
+            _monitorPanel?.PrepareForShutdown();
+            _monitorPanel = null;
 
             _notifyIcon.Visible = false;
             _notifyIcon.Icon = null;
