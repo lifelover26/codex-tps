@@ -1,8 +1,13 @@
-# Codex TPS - Windows
+# Codex TPS - Windows Portable
 
-A Windows 11 tray application for monitoring Codex token throughput.
+A Windows 11 tray application for monitoring Codex token throughput. This is a **no-install, self-contained Portable build**.
 
-## Prerequisites
+## Portable Runtime Requirements
+
+- Windows 11 x64
+- No .NET runtime installation required (self-contained)
+
+## Build-from-Source Requirements
 
 - .NET 10 SDK (https://dotnet.microsoft.com/download/dotnet/10.0)
 - PowerShell 7+ (for release packaging)
@@ -26,8 +31,8 @@ dotnet test windows/CodexTPS.slnx
 ```
 
 This creates:
-- `windows/artifacts/Codex-TPS-Windows-x64-<version>.zip`
-- `windows/artifacts/Codex-TPS-Windows-x64-<version>.zip.sha256`
+- `windows/artifacts/Codex-TPS-Windows-x64-Portable-<version>.zip`
+- `windows/artifacts/Codex-TPS-Windows-x64-Portable-<version>.zip.sha256`
 
 ## Artifact Layout
 
@@ -36,7 +41,48 @@ The ZIP contains:
 - `LICENSE` - MIT license
 - `README.md` - This file
 
-## Manual Run
+## Installation
+
+This is a **Portable** build - no installer is required:
+
+1. Extract the ZIP to a stable writable directory, for example:
+   ```
+   %USERPROFILE%\Apps\CodexTPS
+   ```
+
+2. Do **not** run it directly from inside the ZIP or from a temporary directory.
+
+3. No separately installed .NET runtime is required - the executable is self-contained.
+
+## Settings
+
+Settings are stored per-user at:
+```
+%LOCALAPPDATA%\CodexTPS\settings.json
+```
+
+## Launch at Login
+
+The "Launch at Login" menu option writes the current executable path to the current-user Run key in the registry.
+
+**Important:** Disable Launch at Login before moving or deleting the portable directory. Moving the directory while Launch at Login is enabled will leave a stale path in the registry.
+
+## Manual Update Workflow
+
+1. Exit Codex TPS.
+2. Extract the new package.
+3. Replace the old portable files.
+4. Start the new executable.
+5. Existing settings remain preserved in `%LOCALAPPDATA%\CodexTPS\`.
+
+## Removal Workflow
+
+1. Disable Launch at Login while the app is still running (via the tray menu).
+2. Exit Codex TPS.
+3. Delete the portable directory.
+4. Optionally delete `%LOCALAPPDATA%\CodexTPS` to remove settings.
+
+## Manual Run for Testing
 
 ```powershell
 $testHome = Join-Path $env:TEMP "codex-tps-empty"
@@ -49,13 +95,31 @@ After running, **exit the app first**, then you can remove the temporary CODEX_H
 
 ```powershell
 Remove-Item -Recurse -Force $testHome
-$env:CODEX_HOME = $null
+Remove-Item Env:CODEX_HOME -ErrorAction SilentlyContinue
+```
+
+## Checksum Verification
+
+Verify the downloaded ZIP using PowerShell before extracting or running. **Do not run or extract the package if verification fails.**
+
+```powershell
+$zipPath = "Codex-TPS-Windows-x64-Portable-<version>.zip"
+$checksumPath = "$zipPath.sha256"
+
+$expectedHash = (Get-Content $checksumPath -Raw).Split('  ')[0].Trim()
+$actualHash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLower()
+
+if ($expectedHash -eq $actualHash) {
+    Write-Host "Checksum verified successfully"
+} else {
+    throw "Checksum verification failed"
+}
 ```
 
 ## Status
 
 - Windows x64 only
-- Currently unsigned build
+- Currently unsigned build - Windows may show a security warning
 - No installer (manual deployment)
 - No automatic updates
 

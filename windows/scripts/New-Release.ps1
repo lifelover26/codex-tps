@@ -34,7 +34,7 @@ $publishDir = Join-Path $stagingDir 'publish'
 $zipContentDir = Join-Path $stagingDir 'zip-content'
 $backupDir = Join-Path $stagingDir 'backup'
 
-$zipName = "Codex-TPS-Windows-x64-$Version.zip"
+$zipName = "Codex-TPS-Windows-x64-Portable-$Version.zip"
 $zipPath = Join-Path $artifactsDir $zipName
 $checksumPath = "$zipPath.sha256"
 
