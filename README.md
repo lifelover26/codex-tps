@@ -20,6 +20,14 @@
   <a href="#english">English</a> | <a href="#简体中文">简体中文</a> | <a href="windows/README.md">Full Windows guide / 完整 Windows 指南</a>
 </p>
 
+<p align="center">
+  <img src="docs/assets/windows-panel-overlay.png" alt="Codex TPS for Windows detailed metrics panel and desktop overlay">
+</p>
+
+<p align="center">
+  <sub>Detailed metrics panel and optional desktop overlay</sub>
+</p>
+
 > This repository is an unofficial Windows port of
 > [gaofeng21cn/codex-tps](https://github.com/gaofeng21cn/codex-tps), the
 > original macOS menu bar app created by Feng Gao. See
