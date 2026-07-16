@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/CodexTPSCore/CodexTPSCore.csproj" />
+    <Project Path="src/CodexTPSTray/CodexTPSTray.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CodexTPSCore.Tests/CodexTPSCore.Tests.csproj" />
