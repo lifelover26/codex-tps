@@ -1,232 +1,205 @@
 <p align="center">
-  <img src="Resources/AppIcon.png" width="128" alt="Codex TPS app icon">
+  <img src="Resources/AppIcon.png" width="112" alt="Codex TPS icon">
 </p>
 
-<h1 align="center">Codex TPS</h1>
+<h1 align="center">Codex TPS for Windows</h1>
 
 <p align="center">
-  A privacy-first macOS menu bar monitor for local Codex token throughput.
+  A privacy-first Windows 11 tray monitor for local Codex token throughput.<br>
+  Self-contained, portable, and processed entirely on your computer.
 </p>
 
-> **Windows 11 x64 port:** The `windows-port` branch provides a native .NET 10
-> tray application and a self-contained Portable ZIP. See the
-> [Windows guide](windows/README.md) for installation, usage, privacy, and
-> release details.
-
 <p align="center">
-  <a href="https://github.com/gaofeng21cn/codex-tps/actions/workflows/ci.yml"><img src="https://github.com/gaofeng21cn/codex-tps/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/gaofeng21cn/codex-tps/releases/latest"><img src="https://img.shields.io/github/v/release/gaofeng21cn/codex-tps" alt="Latest release"></a>
+  <a href="https://github.com/lifelover26/codex-tps/releases/latest"><img src="https://img.shields.io/github/v/release/lifelover26/codex-tps?label=Windows%20release" alt="Latest Windows release"></a>
+  <img src="https://img.shields.io/badge/Windows-11%20x64-0078D4.svg" alt="Windows 11 x64">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/macOS-13%2B-black.svg" alt="macOS 13 or later">
+  <img src="https://img.shields.io/badge/data-local%20only-2E7D32.svg" alt="Local data only">
 </p>
 
 <p align="center">
-  <a href="#english">English</a> · <a href="#简体中文">简体中文</a>
+  <a href="#english">English</a> | <a href="#简体中文">简体中文</a> | <a href="windows/README.md">Full Windows guide / 完整 Windows 指南</a>
 </p>
 
-![Codex TPS menu bar panel](docs/assets/codex-tps-panel.png)
+> This repository is an unofficial Windows port of
+> [gaofeng21cn/codex-tps](https://github.com/gaofeng21cn/codex-tps), the
+> original macOS menu bar app created by Feng Gao. See
+> [Origin and acknowledgements](#origin-and-acknowledgements) for details.
 
 ## English
 
-Codex TPS turns the usage events already written by Codex into a compact menu
-bar readout. It reads local session logs incrementally, keeps a rolling one-hour
-window in memory, and never sends conversation data anywhere.
+Codex TPS for Windows reads the usage events already written to local Codex
+session logs and turns them into an at-a-glance throughput display. It does not
+require an API key and does not upload conversation data.
+
+### Download
+
+Download the latest Portable ZIP and its `.sha256` file from
+[GitHub Releases](https://github.com/lifelover26/codex-tps/releases/latest).
+
+1. Verify the ZIP checksum.
+2. Extract it to a stable directory such as `%USERPROFILE%\Apps\CodexTPS`.
+3. Run `CodexTPSTray.exe`.
+
+No installer, administrator access, or separately installed .NET runtime is
+required. The current build is unsigned, so Windows SmartScreen may display a
+warning. Do not run the executable directly from inside the ZIP.
 
 ### Features
 
-- Rolling token rates for `1m`, `5m`, `30m`, and `1h`
-- Input, cached-input, output, and reasoning breakdowns
+- Native Windows 11 notification-area application
+- Detailed panel with rolling `1m`, `5m`, `30m`, and `1h` metrics
+- Optional compact desktop overlay that can be dragged or locked click-through
+- Total, input, cached-input, output, and reasoning token throughput
 - Requests per minute, active sessions, and cache ratio
-- `5s`, `15s`, `30s`, or `1min` auto-refresh cadence
-- Manual refresh, session-folder shortcut, and launch at login
-- Automatic GitHub release checks and checksum-verified one-click updates
-- A JSON snapshot CLI for scripts and integrations
+- English and Simplified Chinese interface
+- Configurable `5s`, `15s`, `30s`, or `60s` refresh cadence
+- Manual refresh, session-folder shortcut, and optional launch at login
+- Self-contained x64 Portable release
 
-The compact menu bar readout follows the window selected in the panel and
-remembers that selection across launches. Codex records usage when a model
-request completes, so the number is completion-time throughput, not a
-per-streaming-chunk speedometer.
+### Basic use
 
-### Requirements
+- Left-click the tray icon to show or hide the detailed metrics panel.
+- Right-click it to change the language, metric window, refresh cadence, login
+  behavior, and desktop overlay settings.
+- When the overlay is unlocked, drag it to move it. When locked, it becomes
+  mouse click-through.
 
-- macOS 13 Ventura or later
-- Codex session logs under `~/.codex/sessions`, or `$CODEX_HOME/sessions`
+Codex records usage when a model request completes. The displayed TPS is
+completion-time throughput over the selected rolling window, not a live
+per-streaming-token speedometer.
 
-Codex TPS does not need an API key of its own.
+### Requirements and settings
 
-### Quick install
+- Windows 11 x64
+- Codex logs under `%USERPROFILE%\.codex\sessions`, or
+  `%CODEX_HOME%\sessions` when `CODEX_HOME` is set
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/gaofeng21cn/codex-tps/main/scripts/install-release.sh | bash
+Per-user settings are stored at:
+
+```text
+%LOCALAPPDATA%\CodexTPS\settings.json
 ```
 
-The installer downloads the latest universal DMG, verifies its published
-SHA-256 checksum, stages and verifies the app before replacing an existing
-installation, then installs it in `/Applications` and launches it. A failed
-replacement restores the previous app. Use a per-user destination or skip
-launch with environment variables:
+The executable is portable; saved preferences and the optional launch-at-login
+registry entry intentionally remain outside the application directory.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/gaofeng21cn/codex-tps/main/scripts/install-release.sh | CODEX_TPS_INSTALL_DIR="$HOME/Applications" CODEX_TPS_NO_LAUNCH=1 bash
-```
+### Privacy
 
-Prefer a graphical install? Download
-[`Codex-TPS.dmg`](https://github.com/gaofeng21cn/codex-tps/releases/latest/download/Codex-TPS.dmg)
-from the latest release, open it, and drag the app to Applications.
+- Session processing is local only.
+- The scanner reads structural metadata and token-count records needed for
+  accounting.
+- Prompt, response, and tool-content bodies are not displayed, stored, or
+  transmitted.
+- The Windows application contains no analytics, login, telemetry, or automatic
+  update path.
 
-Release builds are ad-hoc signed but not notarized by Apple. When installing the
-DMG through Finder, macOS may require the standard right-click **Open** flow or
-approval in **System Settings > Privacy & Security**.
+These values are operational estimates based on local logs, not authoritative
+billing data.
 
 ### Build from source
 
-Requires Xcode Command Line Tools (`xcode-select --install`).
+Building requires the .NET 10 SDK. PowerShell 7 or later is also required for
+release packaging.
 
-```bash
-git clone https://github.com/gaofeng21cn/codex-tps.git
-cd codex-tps
-./scripts/install.sh
+```powershell
+dotnet build .\windows\CodexTPS.slnx
+dotnet test .\windows\CodexTPS.slnx
+dotnet format .\windows\CodexTPS.slnx --verify-no-changes
 ```
 
-This builds for the current Mac, ad-hoc signs, installs, and launches the app.
-To install without launching, pass `--no-launch`. A custom destination is also
-supported:
-
-```bash
-CODEX_TPS_INSTALL_DIR="$HOME/Applications" ./scripts/install.sh
-```
-
-### Metrics
-
-| Metric | Meaning |
-| --- | --- |
-| `token/s` | `total_tokens` completed inside the selected window, divided by the full window duration |
-| Input | Input tokens, including the cached-input subset |
-| Cached | Cached input tokens; displayed separately but never added twice |
-| Output | Output tokens, including the reasoning subset |
-| Reasoning | Reasoning output tokens; displayed separately but never added twice |
-| Requests/min | Completed usage events normalized to one minute |
-
-The parser uses `last_token_usage` as the request increment and cumulative
-`total_token_usage` to detect duplicate or replayed history. Forked and subagent
-sessions are filtered with lifecycle state because inherited history may be
-rewritten with the child session's timestamp. Legacy UUIDv4 turns inside replay
-remain excluded until a verifiable UUIDv7 child turn begins.
-
-### Privacy and scope
-
-- Reads only structural records needed for usage accounting
-- Does not persist or display prompts, responses, or tool-call bodies
-- Uses the network only to check GitHub release metadata and download an update
-- Contains no analytics SDK, account login, or conversation-data upload
-- Keeps rolling usage state in memory only
-
-The app checks for a release after launch and every six hours while running. A
-new version is installed only after the user clicks **Update now**. The DMG must
-match the release's published SHA-256 checksum and expected version before the
-installed app is replaced.
-
-Codex TPS is operational telemetry, not billing data. It reports usage visible
-in local Codex logs and cannot prove which API key was charged. Log formats are
-an implementation surface and may change in future Codex versions.
-
-### Snapshot CLI
-
-```bash
-swift run codex-tps-snapshot --json
-```
-
-Set `CODEX_HOME` to inspect a non-default Codex home:
-
-```bash
-CODEX_HOME=/path/to/codex-home swift run codex-tps-snapshot --json
-```
-
-### Development
-
-```bash
-xcrun swift-format lint --recursive Sources Tests Package.swift
-swift test
-./scripts/build-app.sh
-./scripts/build-dmg.sh
-```
-
-Architecture and accounting invariants are documented in
-[`docs/architecture.md`](docs/architecture.md). Contributions should preserve
-the replay fixtures and the no-conversation-content boundary.
-
-### Acknowledgements and disclaimer
-
-The accounting semantics were informed by the public
-[Tokscale](https://github.com/junhoyeo/tokscale) project. Codex TPS is an
-independent implementation and does not embed Tokscale.
-
-Codex TPS is an unofficial community project. It is not affiliated with,
-endorsed by, or sponsored by OpenAI. OpenAI and Codex are trademarks of their
-respective owner.
+See the [full Windows guide](windows/README.md) for checksum verification,
+troubleshooting, removal, and release packaging.
 
 ## 简体中文
 
-Codex TPS 是一个仅在本机运行的 macOS 菜单栏小工具。它增量读取 Codex
-已经写入 `~/.codex/sessions` 的用量事件，显示最近 `1 分钟 / 5 分钟 /
-30 分钟 / 1 小时` 的 token/s，并提供输入、缓存、输出、推理、请求/分钟、
-活跃会话和缓存占比等统计。
+Codex TPS for Windows 是一款 Windows 11 托盘工具。它读取 Codex 已写入
+本机的会话用量记录，显示不同时间窗口内的 token 吞吐率。程序本身不需要
+API Key，也不会上传对话内容。
 
-刷新节奏可选 `5 秒 / 15 秒 / 30 秒 / 1 分钟`，默认 15 秒并会记住上次
-选择。菜单栏数字会跟随面板当前选择的统计区间，并在重启后保留该选择。由于
-Codex 在一次模型请求完成后才写入 token 用量，它反映的是完成时吞吐量，不是
-逐个流式 chunk 的瞬时速度。
+### 下载与运行
 
-### 一键安装
+前往 [GitHub Releases](https://github.com/lifelover26/codex-tps/releases/latest)
+下载最新的 Portable ZIP 和对应的 `.sha256` 文件。
 
-系统要求为 macOS 13 或更高版本。应用本身不需要 API Key。
+1. 校验 ZIP 的 SHA-256。
+2. 解压到稳定的目录，例如 `%USERPROFILE%\Apps\CodexTPS`。
+3. 运行 `CodexTPSTray.exe`。
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/gaofeng21cn/codex-tps/main/scripts/install-release.sh | bash
+发布包解压即用，不需要安装程序、管理员权限或另行安装 .NET 运行时。当前
+版本尚未进行代码签名，因此 Windows SmartScreen 可能显示警告。请勿直接在
+ZIP 压缩包内运行程序。
+
+### 主要功能
+
+- 原生 Windows 11 通知区域应用
+- 详细统计面板，支持 `1 分钟 / 5 分钟 / 30 分钟 / 1 小时` 时间窗口
+- 可选桌面悬浮窗；未锁定时可拖动，锁定后鼠标可穿透
+- 显示总 TPS、输入、缓存输入、输出和推理输出
+- 显示请求/分钟、活动会话和缓存比例
+- 支持简体中文与英文即时切换
+- 自动刷新可选 `5 / 15 / 30 / 60 秒`
+- 支持手动刷新、打开会话目录和可选的开机启动
+- 自包含 Windows x64 Portable 发布包
+
+### 基本操作
+
+- 左键单击托盘图标：显示或隐藏详细面板。
+- 右键单击托盘图标：设置语言、统计窗口、刷新频率、开机启动和悬浮窗。
+- 悬浮窗未锁定时可以拖动；锁定后不会拦截鼠标操作。
+
+Codex 会在一次模型请求完成时记录 token 用量，因此这里显示的是所选滚动
+时间窗口内的完成时吞吐率，并不是逐个流式 token 的瞬时速度。
+
+### 系统要求与设置
+
+- Windows 11 x64
+- Codex 日志位于 `%USERPROFILE%\.codex\sessions`；设置了 `CODEX_HOME`
+  时则读取 `%CODEX_HOME%\sessions`
+
+用户设置保存在：
+
+```text
+%LOCALAPPDATA%\CodexTPS\settings.json
 ```
 
-安装器会下载 latest release 中同时支持 Apple Silicon 和 Intel Mac 的 DMG，
-校验官方发布的 SHA-256，在目标目录完成暂存和签名校验后原子替换旧版本；失败
-会自动回滚。默认安装到 `/Applications` 并启动。也可以直接下载
-[`Codex-TPS.dmg`](https://github.com/gaofeng21cn/codex-tps/releases/latest/download/Codex-TPS.dmg)，
-打开后将应用拖入 Applications。
+程序文件本身是绿色版；用户偏好和可选的开机启动注册表项会保留在程序目录
+之外。
 
-应用启动后会自动检查 GitHub latest release，运行期间每 6 小时检查一次；发现
-新版本后由用户点击“立即更新”，不会无提示退出或强制更新。也可随时点击面板
-顶部的检查更新按钮。
+### 隐私说明
 
-Release 使用 ad-hoc 签名，尚未进行 Apple notarization。通过 Finder 安装时，
-macOS 可能要求右键选择“打开”，或在“系统设置 > 隐私与安全性”中确认。
+- 所有会话处理均在本机完成。
+- 扫描器只读取统计所需的结构信息和 token 计数记录。
+- 不显示、保存或传输提示词、回复正文和工具调用正文。
+- Windows 版没有分析 SDK、账号登录、遥测或自动更新功能。
 
-### 从源码安装
+显示数据来自本机日志，适合观察运行状态，但不等同于官方账单数据。
 
-源码构建需要 Xcode Command Line Tools（`xcode-select --install`）。
+校验方法、故障排查、卸载和源码构建说明请参阅
+[完整 Windows 指南](windows/README.md)。
 
-```bash
-git clone https://github.com/gaofeng21cn/codex-tps.git
-cd codex-tps
-./scripts/install.sh
-```
+## Origin and acknowledgements
 
-应用会安装到 `/Applications/Codex TPS.app` 并立即启动。如果 Codex Home 不在
-默认位置，可通过 `CODEX_HOME` 指定。
+This Windows port is based on the original
+[Codex TPS](https://github.com/gaofeng21cn/codex-tps) project created by
+[Feng Gao](https://github.com/gaofeng21cn) as a macOS menu bar application.
+Thanks to Feng Gao for the original project, product concept, interface design,
+accounting semantics, and test foundation.
 
-### 隐私与统计边界
+The Windows application reimplements the runtime and user interface in C#,
+.NET 10, and WPF, with Windows-specific tray integration, a bilingual metrics
+panel, an optional desktop overlay, and Portable release packaging. The original
+Swift/macOS source is retained in this fork for attribution and upstream
+comparison.
 
-- 只解析 token 统计及去重所需的结构记录，不读取或展示对话正文
-- 网络仅用于检查 GitHub Release 元数据和下载用户确认安装的更新
-- 没有分析 SDK、登录流程，也不会上传任何会话内容
-- 缓存 token 是输入子集，推理 token 是输出子集，不会重复计入总量
-- 本机日志统计用于运行观察，不等同于服务端账单，也不能证明具体由哪个 API Key 扣费
+This is an independently maintained, unofficial community port. It is not an
+official release by, affiliated with, or endorsed by the original author or
+OpenAI. OpenAI and Codex are trademarks of their respective owner.
 
-### 开发
+The original project's accounting semantics were informed by the public
+[Tokscale](https://github.com/junhoyeo/tokscale) project; Codex TPS remains an
+independent implementation and does not embed Tokscale.
 
-```bash
-swift test
-swift run codex-tps-snapshot --json
-./scripts/build-app.sh
-./scripts/build-dmg.sh
-```
+## License
 
-项目采用 [MIT License](LICENSE)。这是非官方社区项目，与 OpenAI 不存在隶属、
-赞助或背书关系。
+This repository is distributed under the [MIT License](LICENSE). The original
+copyright and permission notice are retained as required by that license.
