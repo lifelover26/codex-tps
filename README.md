@@ -8,6 +8,11 @@
   A privacy-first macOS menu bar monitor for local Codex token throughput.
 </p>
 
+> **Windows 11 x64 port:** The `windows-port` branch provides a native .NET 10
+> tray application and a self-contained Portable ZIP. See the
+> [Windows guide](windows/README.md) for installation, usage, privacy, and
+> release details.
+
 <p align="center">
   <a href="https://github.com/gaofeng21cn/codex-tps/actions/workflows/ci.yml"><img src="https://github.com/gaofeng21cn/codex-tps/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/gaofeng21cn/codex-tps/releases/latest"><img src="https://img.shields.io/github/v/release/gaofeng21cn/codex-tps" alt="Latest release"></a>
