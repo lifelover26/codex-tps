@@ -44,8 +44,12 @@ public class TraySettingsStore
             MetricWindow window = ParseMetricWindow(raw?.SelectedWindow);
             RefreshCadence cadence = ParseRefreshCadence(raw?.RefreshCadence);
             Language language = ParseLanguage(raw?.Language);
+            bool overlayEnabled = ParseOverlayEnabled(raw?.OverlayEnabled);
+            bool overlayLocked = ParseOverlayLocked(raw?.OverlayLocked);
+            double? overlayLeft = ParseOverlayPosition(raw?.OverlayLeft);
+            double? overlayTop = ParseOverlayPosition(raw?.OverlayTop);
 
-            return new TraySettings(window, cadence, language);
+            return new TraySettings(window, cadence, language, overlayEnabled, overlayLocked, overlayLeft, overlayTop);
         }
         catch
         {
@@ -153,11 +157,41 @@ public class TraySettingsStore
         return TraySettings.Default.Language;
     }
 
+    private static bool ParseOverlayEnabled(bool? value)
+    {
+        return value ?? TraySettings.Default.OverlayEnabled;
+    }
+
+    private static bool ParseOverlayLocked(bool? value)
+    {
+        return value ?? TraySettings.Default.OverlayLocked;
+    }
+
+    private static double? ParseOverlayPosition(double? value)
+    {
+        if (value == null)
+        {
+            return TraySettings.Default.OverlayLeft;
+        }
+
+        double pos = value.Value;
+        if (double.IsNaN(pos) || double.IsInfinity(pos))
+        {
+            return TraySettings.Default.OverlayLeft;
+        }
+
+        return pos;
+    }
+
     private sealed class RawSettingsDto
     {
         public string? SelectedWindow { get; set; }
         public int? RefreshCadence { get; set; }
         public string? Language { get; set; }
+        public bool? OverlayEnabled { get; set; }
+        public bool? OverlayLocked { get; set; }
+        public double? OverlayLeft { get; set; }
+        public double? OverlayTop { get; set; }
 
         public RawSettingsDto()
         {
@@ -168,6 +202,10 @@ public class TraySettingsStore
             SelectedWindow = settings.SelectedWindow.ToString();
             RefreshCadence = (int)settings.RefreshCadence;
             Language = settings.Language.ToString();
+            OverlayEnabled = settings.OverlayEnabled;
+            OverlayLocked = settings.OverlayLocked;
+            OverlayLeft = settings.OverlayLeft;
+            OverlayTop = settings.OverlayTop;
         }
     }
 }

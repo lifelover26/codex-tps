@@ -65,6 +65,38 @@ public static class Localization
         };
     }
 
+    public static string OverlayMetricWindowOneMinute(Language language)
+    {
+        return language == Language.Chinese ? "1 分钟" : "1 min";
+    }
+
+    public static string OverlayMetricWindowFiveMinutes(Language language)
+    {
+        return language == Language.Chinese ? "5 分钟" : "5 min";
+    }
+
+    public static string OverlayMetricWindowThirtyMinutes(Language language)
+    {
+        return language == Language.Chinese ? "30 分钟" : "30 min";
+    }
+
+    public static string OverlayMetricWindowOneHour(Language language)
+    {
+        return language == Language.Chinese ? "1 小时" : "1 hr";
+    }
+
+    public static string GetOverlayMetricWindowDisplayName(MetricWindow window, Language language)
+    {
+        return window switch
+        {
+            MetricWindow.OneMinute => OverlayMetricWindowOneMinute(language),
+            MetricWindow.FiveMinutes => OverlayMetricWindowFiveMinutes(language),
+            MetricWindow.ThirtyMinutes => OverlayMetricWindowThirtyMinutes(language),
+            MetricWindow.OneHour => OverlayMetricWindowOneHour(language),
+            _ => OverlayMetricWindowOneMinute(language)
+        };
+    }
+
     public static string RefreshCadenceFiveSeconds(Language language)
     {
         return language == Language.Chinese ? "5 秒" : "5 Seconds";
@@ -272,5 +304,45 @@ public static class Localization
     public static string FailedToReadStartupSettings(Language language)
     {
         return language == Language.Chinese ? "无法读取启动设置。" : "Failed to read startup settings.";
+    }
+
+    public static string OverlayTitle(Language language)
+    {
+        return "Codex TPS";
+    }
+
+    public static string OverlayRequestsPerMinute(Language language)
+    {
+        return language == Language.Chinese ? "请求/分钟" : "req/min";
+    }
+
+    public static string OverlaySessions(Language language)
+    {
+        return language == Language.Chinese ? "个会话" : "sessions";
+    }
+
+    public static string OverlayCache(Language language)
+    {
+        return language == Language.Chinese ? "缓存" : "cache";
+    }
+
+    public static string OverlayMenu(Language language)
+    {
+        return language == Language.Chinese ? "悬浮窗" : "Overlay";
+    }
+
+    public static string ShowOverlayMenu(Language language)
+    {
+        return language == Language.Chinese ? "显示悬浮窗" : "Show Overlay";
+    }
+
+    public static string LockOverlayMenu(Language language)
+    {
+        return language == Language.Chinese ? "锁定悬浮窗" : "Lock Overlay";
+    }
+
+    public static string ResetOverlayPositionMenu(Language language)
+    {
+        return language == Language.Chinese ? "重置悬浮窗位置" : "Reset Overlay Position";
     }
 }

@@ -18,9 +18,11 @@ public class TrayIconManager : IDisposable
     private readonly TraySettingsStore _settingsStore;
     private readonly SessionFolderLauncher _sessionFolderLauncher;
     private readonly StartupManager _startupManager;
+    private readonly IMonitorWorkAreaProvider _workAreaProvider;
 
     private MonitorPanelWindow? _monitorPanel;
     private MonitorPanelViewModel? _monitorPanelViewModel;
+    private OverlayWindow? _overlayWindow;
 
     private UsageSnapshot? _latestSnapshot;
     private TraySettings _currentSettings;
@@ -53,23 +55,30 @@ public class TrayIconManager : IDisposable
     private readonly ToolStripMenuItem _refreshMenuItem = new();
     private readonly ToolStripMenuItem _exitMenuItem = new();
 
+    private readonly ToolStripMenuItem _showOverlayMenuItem = new() { CheckOnClick = true };
+    private readonly ToolStripMenuItem _lockOverlayMenuItem = new() { CheckOnClick = true };
+    private readonly ToolStripMenuItem _resetOverlayPositionMenuItem = new();
+    private readonly ToolStripMenuItem _overlaySubmenu = new();
+
     public TrayIconManager() : this(
         TraySettingsStore.CreateDefault(),
         new SessionScanner(),
         new ShellLauncher(),
         new RunKeyStore(),
-        () => Environment.ProcessPath
+        () => Environment.ProcessPath,
+        new WpfMonitorWorkAreaProvider()
     )
     {
     }
 
-    public TrayIconManager(TraySettingsStore settingsStore, SessionScanner sessionScanner, IShellLauncher shellLauncher, IRunKeyStore runKeyStore, Func<string?> executablePathProvider)
+    public TrayIconManager(TraySettingsStore settingsStore, SessionScanner sessionScanner, IShellLauncher shellLauncher, IRunKeyStore runKeyStore, Func<string?> executablePathProvider, IMonitorWorkAreaProvider workAreaProvider)
     {
         _settingsStore = settingsStore;
         _currentSettings = settingsStore.Load();
         _sessionScanner = sessionScanner;
         _sessionFolderLauncher = new SessionFolderLauncher(() => sessionScanner.SessionsRoot, shellLauncher);
         _startupManager = new StartupManager(runKeyStore, executablePathProvider);
+        _workAreaProvider = workAreaProvider;
 
         _notifyIcon = new NotifyIcon();
         _refreshTimer = new DispatcherTimer();
@@ -85,9 +94,66 @@ public class TrayIconManager : IDisposable
         InitializeContextMenu();
         InitializeNotifyIcon();
         InitializeLaunchAtLoginState();
+        InitializeOverlay();
 
         _refreshTimer.Start();
         _ = RefreshAsync();
+    }
+
+    private void InitializeOverlay()
+    {
+        _overlayWindow = new OverlayWindow(_workAreaProvider);
+        _overlayWindow.DragCompleted += OnOverlayDragCompleted;
+        _overlayWindow.UpdateSettings(_currentSettings);
+
+        if (_currentSettings.OverlayEnabled)
+        {
+            ShowOverlay();
+        }
+    }
+
+    private void ShowOverlay()
+    {
+        if (_overlayWindow == null || _isShuttingDown)
+            return;
+
+        _overlayWindow.UpdateSettings(_currentSettings);
+        _overlayWindow.Show();
+        _overlayWindow.ResetPosition(_currentSettings.OverlayLeft, _currentSettings.OverlayTop);
+
+        if (_latestSnapshot.HasValue)
+        {
+            UpdateOverlayContent();
+        }
+    }
+
+    private void HideOverlay()
+    {
+        if (_overlayWindow == null)
+            return;
+
+        _overlayWindow.Hide();
+    }
+
+    private void UpdateOverlayContent()
+    {
+        if (_overlayWindow == null || !_overlayWindow.IsVisible)
+            return;
+
+        if (_latestSnapshot.HasValue)
+        {
+            string[] lines = OverlayFormatter.FormatOverlay(_latestSnapshot.Value, _currentSettings.SelectedWindow, _currentSettings.Language);
+            _overlayWindow.UpdateContent(lines);
+        }
+    }
+
+    private void OnOverlayDragCompleted(double left, double top)
+    {
+        if (_isShuttingDown)
+            return;
+
+        _currentSettings = _currentSettings with { OverlayLeft = left, OverlayTop = top };
+        _settingsStore.TrySave(_currentSettings);
     }
 
     private void InitializeContextMenu()
@@ -140,6 +206,23 @@ public class TrayIconManager : IDisposable
 
         contextMenu.Items.Add(new ToolStripSeparator());
 
+        _overlaySubmenu.Text = Localization.OverlayMenu(_currentSettings.Language);
+        _showOverlayMenuItem.Text = Localization.ShowOverlayMenu(_currentSettings.Language);
+        _showOverlayMenuItem.Click += OnShowOverlayClicked;
+        _overlaySubmenu.DropDownItems.Add(_showOverlayMenuItem);
+
+        _lockOverlayMenuItem.Text = Localization.LockOverlayMenu(_currentSettings.Language);
+        _lockOverlayMenuItem.Click += OnLockOverlayClicked;
+        _overlaySubmenu.DropDownItems.Add(_lockOverlayMenuItem);
+
+        _resetOverlayPositionMenuItem.Text = Localization.ResetOverlayPositionMenu(_currentSettings.Language);
+        _resetOverlayPositionMenuItem.Click += OnResetOverlayPositionClicked;
+        _overlaySubmenu.DropDownItems.Add(_resetOverlayPositionMenuItem);
+
+        contextMenu.Items.Add(_overlaySubmenu);
+
+        contextMenu.Items.Add(new ToolStripSeparator());
+
         _languageSubmenu.Text = Localization.LanguageMenu(_currentSettings.Language);
 
         _englishLanguageMenuItem.Text = "English";
@@ -165,6 +248,51 @@ public class TrayIconManager : IDisposable
         _notifyIcon.ContextMenuStrip = contextMenu;
 
         UpdateMenuCheckmarks();
+    }
+
+    private void OnShowOverlayClicked(object? sender, EventArgs e)
+    {
+        if (_isShuttingDown)
+            return;
+
+        bool enabled = _showOverlayMenuItem.Checked;
+        _currentSettings = _currentSettings with { OverlayEnabled = enabled };
+        _settingsStore.TrySave(_currentSettings);
+
+        if (enabled)
+        {
+            ShowOverlay();
+        }
+        else
+        {
+            HideOverlay();
+        }
+    }
+
+    private void OnLockOverlayClicked(object? sender, EventArgs e)
+    {
+        if (_isShuttingDown)
+            return;
+
+        bool locked = _lockOverlayMenuItem.Checked;
+        _currentSettings = _currentSettings with { OverlayLocked = locked };
+        _settingsStore.TrySave(_currentSettings);
+
+        _overlayWindow?.UpdateSettings(_currentSettings);
+    }
+
+    private void OnResetOverlayPositionClicked(object? sender, EventArgs e)
+    {
+        if (_isShuttingDown)
+            return;
+
+        _currentSettings = _currentSettings with { OverlayLeft = null, OverlayTop = null };
+        _settingsStore.TrySave(_currentSettings);
+
+        if (_overlayWindow != null)
+        {
+            _overlayWindow.ResetPosition();
+        }
     }
 
     private void InitializeNotifyIcon()
@@ -259,6 +387,9 @@ public class TrayIconManager : IDisposable
         UpdateMenuLocalization();
         UpdateMenuCheckmarks();
         _monitorPanel?.UpdateSettings(_currentSettings);
+        _overlayWindow?.UpdateSettings(_currentSettings);
+
+        UpdateOverlayContent();
 
         if (_latestSnapshot.HasValue)
         {
@@ -289,6 +420,11 @@ public class TrayIconManager : IDisposable
 
         _openSessionsFolderMenuItem.Text = Localization.OpenSessionsFolderMenu(language);
         _launchAtLoginMenuItem.Text = Localization.LaunchAtLogin(language);
+
+        _overlaySubmenu.Text = Localization.OverlayMenu(language);
+        _showOverlayMenuItem.Text = Localization.ShowOverlayMenu(language);
+        _lockOverlayMenuItem.Text = Localization.LockOverlayMenu(language);
+        _resetOverlayPositionMenuItem.Text = Localization.ResetOverlayPositionMenu(language);
     }
 
     private void OnLaunchAtLoginRequested(bool enabled)
@@ -349,6 +485,7 @@ public class TrayIconManager : IDisposable
 
                     _latestSnapshot = snapshot;
                     UpdateUI(snapshot);
+                    UpdateOverlayContent();
 
                     _monitorPanel?.UpdateSnapshot(snapshot);
                 }
@@ -406,6 +543,9 @@ public class TrayIconManager : IDisposable
 
         UpdateMenuCheckmarks();
         _monitorPanel?.UpdateSettings(_currentSettings);
+        _overlayWindow?.UpdateSettings(_currentSettings);
+
+        UpdateOverlayContent();
 
         if (_latestSnapshot.HasValue)
         {
@@ -494,6 +634,9 @@ public class TrayIconManager : IDisposable
 
         _englishLanguageMenuItem.Checked = _currentSettings.Language == Language.English;
         _chineseLanguageMenuItem.Checked = _currentSettings.Language == Language.Chinese;
+
+        _showOverlayMenuItem.Checked = _currentSettings.OverlayEnabled;
+        _lockOverlayMenuItem.Checked = _currentSettings.OverlayLocked;
     }
 
     private void OnExitClicked(object? sender, EventArgs e)
@@ -510,6 +653,7 @@ public class TrayIconManager : IDisposable
 
         _refreshTimer.Stop();
 
+        _overlayWindow?.PrepareForShutdown();
         _monitorPanel?.PrepareForShutdown();
 
         System.Windows.Application.Current.Shutdown();
@@ -532,6 +676,9 @@ public class TrayIconManager : IDisposable
         if (disposing)
         {
             _refreshTimer.Stop();
+
+            _overlayWindow?.PrepareForShutdown();
+            _overlayWindow = null;
 
             _monitorPanel?.PrepareForShutdown();
             _monitorPanel = null;

@@ -1,0 +1,71 @@
+<Window x:Class="CodexTPSTray.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="112"
+        SizeToContent="Height"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Opacity="1"
+        Focusable="False"
+        FontFamily="Microsoft YaHei UI"
+        TextOptions.TextFormattingMode="Display">
+    <Border Background="#731C1C1C"
+            CornerRadius="8"
+            Padding="8,8">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="20"/>
+                <RowDefinition Height="20"/>
+                <RowDefinition Height="20"/>
+                <RowDefinition Height="20"/>
+                <RowDefinition Height="20"/>
+                <RowDefinition Height="20"/>
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="TitleText"
+                       Text="Codex TPS"
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       Foreground="White"
+                       VerticalAlignment="Center"/>
+            <TextBlock x:Name="WindowText"
+                       Text="1 min"
+                       FontSize="12"
+                       FontWeight="Normal"
+                       Foreground="White"
+                       Grid.Row="1"
+                       VerticalAlignment="Center"/>
+            <TextBlock x:Name="TpsText"
+                       Text="0 token/s"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Foreground="White"
+                       Grid.Row="2"
+                       VerticalAlignment="Center"/>
+            <TextBlock x:Name="RequestsText"
+                       Text="0 req/min"
+                       FontSize="12"
+                       FontWeight="Normal"
+                       Foreground="White"
+                       Grid.Row="3"
+                       VerticalAlignment="Center"/>
+            <TextBlock x:Name="SessionsText"
+                       Text="0 sessions"
+                       FontSize="12"
+                       FontWeight="Normal"
+                       Foreground="White"
+                       Grid.Row="4"
+                       VerticalAlignment="Center"/>
+            <TextBlock x:Name="CacheText"
+                       Text="0% cache"
+                       FontSize="12"
+                       FontWeight="Normal"
+                       Foreground="White"
+                       Grid.Row="5"
+                       VerticalAlignment="Center"/>
+        </Grid>
+    </Border>
+</Window>

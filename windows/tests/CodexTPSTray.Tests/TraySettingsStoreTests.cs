@@ -281,4 +281,117 @@ public class TraySettingsStoreTests : IDisposable
         var loaded = store.Load();
         Assert.Equal(Language.Chinese, loaded.Language);
     }
+
+    [Fact]
+    public void Load_LegacyJsonWithoutOverlaySettings_ReturnsDefaults()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"FiveMinutes\",\"RefreshCadence\":30,\"Language\":\"English\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.False(settings.OverlayEnabled);
+        Assert.False(settings.OverlayLocked);
+        Assert.Null(settings.OverlayLeft);
+        Assert.Null(settings.OverlayTop);
+    }
+
+    [Fact]
+    public void Load_ValidOverlayEnabled_ReturnsEnabled()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayEnabled\":true}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.True(settings.OverlayEnabled);
+    }
+
+    [Fact]
+    public void Load_ValidOverlayLocked_ReturnsLocked()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayLocked\":true}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.True(settings.OverlayLocked);
+    }
+
+    [Fact]
+    public void Load_ValidOverlayPosition_ReturnsPosition()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayLeft\":500.5,\"OverlayTop\":300.25}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(500.5, settings.OverlayLeft);
+        Assert.Equal(300.25, settings.OverlayTop);
+    }
+
+    [Fact]
+    public void Load_NullOverlayPosition_ReturnsNull()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayLeft\":null,\"OverlayTop\":null}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Null(settings.OverlayLeft);
+        Assert.Null(settings.OverlayTop);
+    }
+
+    [Fact]
+    public void TrySave_WithOverlaySettings_SavesAndReloads()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(
+            MetricWindow.OneMinute,
+            RefreshCadence.FifteenSeconds,
+            Language.English,
+            OverlayEnabled: true,
+            OverlayLocked: false,
+            OverlayLeft: 500.0,
+            OverlayTop: 200.0
+        );
+
+        bool result = store.TrySave(settings);
+
+        Assert.True(result);
+
+        var loaded = store.Load();
+        Assert.True(loaded.OverlayEnabled);
+        Assert.False(loaded.OverlayLocked);
+        Assert.Equal(500.0, loaded.OverlayLeft);
+        Assert.Equal(200.0, loaded.OverlayTop);
+    }
+
+    [Fact]
+    public void TrySave_WithAllOverlaySettings_SavesAndReloads()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(
+            MetricWindow.FiveMinutes,
+            RefreshCadence.ThirtySeconds,
+            Language.Chinese,
+            OverlayEnabled: true,
+            OverlayLocked: true,
+            OverlayLeft: -1500.0,
+            OverlayTop: 500.5
+        );
+
+        bool result = store.TrySave(settings);
+
+        Assert.True(result);
+
+        var loaded = store.Load();
+        Assert.Equal(MetricWindow.FiveMinutes, loaded.SelectedWindow);
+        Assert.Equal(RefreshCadence.ThirtySeconds, loaded.RefreshCadence);
+        Assert.Equal(Language.Chinese, loaded.Language);
+        Assert.True(loaded.OverlayEnabled);
+        Assert.True(loaded.OverlayLocked);
+        Assert.Equal(-1500.0, loaded.OverlayLeft);
+        Assert.Equal(500.5, loaded.OverlayTop);
+    }
 }
