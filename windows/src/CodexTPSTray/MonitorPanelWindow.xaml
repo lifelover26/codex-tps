@@ -8,50 +8,55 @@
         ShowInTaskbar="False"
         Topmost="True"
         Focusable="True"
-        Background="White"
-        Foreground="#1A1A1A"
+        Background="{DynamicResource PanelBackgroundBrush}"
+        Foreground="{DynamicResource PanelPrimaryTextBrush}"
         FontFamily="Segoe UI, Arial"
         FontSize="12">
 
     <Window.Resources>
         <Style TargetType="ComboBox">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="Foreground" Value="#1A1A1A"/>
-            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="Background" Value="{DynamicResource PanelControlBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PanelPrimaryTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelControlBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="6 2"/>
             <Setter Property="FontSize" Value="12"/>
             <Style.Triggers>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Foreground" Value="#999999"/>
-                    <Setter Property="Background" Value="#F5F5F5"/>
+                    <Setter Property="Foreground" Value="{DynamicResource PanelDisabledForegroundBrush}"/>
+                    <Setter Property="Background" Value="{DynamicResource PanelDisabledBackgroundBrush}"/>
                 </Trigger>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="BorderBrush" Value="#007AFF"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
                 </Trigger>
                 <Trigger Property="IsFocused" Value="True">
-                    <Setter Property="BorderBrush" Value="#007AFF"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
 
         <Style TargetType="ComboBoxItem">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="Background" Value="{DynamicResource PanelControlBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PanelPrimaryTextBrush}"/>
             <Setter Property="Padding" Value="6 4"/>
             <Setter Property="FontSize" Value="12"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#E8F0FE"/>
+                    <Setter Property="Background" Value="{DynamicResource PanelHoverBackgroundBrush}"/>
                 </Trigger>
                 <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="#007AFF"/>
-                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource PanelAccentForegroundBrush}"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Foreground" Value="#999999"/>
+                    <Setter Property="Foreground" Value="{DynamicResource PanelDisabledForegroundBrush}"/>
                 </Trigger>
             </Style.Triggers>
+        </Style>
+
+        <Style TargetType="ToolTip">
+            <Setter Property="Background" Value="{DynamicResource PanelTooltipBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PanelTooltipForegroundBrush}"/>
         </Style>
     </Window.Resources>
 
@@ -65,7 +70,7 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" BorderBrush="#E5E5E5" BorderThickness="0 0 0 1" Padding="0 0 0 8" Margin="0 0 0 8">
+        <Border Grid.Row="0" BorderBrush="{DynamicResource PanelDividerBrush}" BorderThickness="0 0 0 1" Padding="0 0 0 8" Margin="0 0 0 8">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -80,9 +85,9 @@
                     <TextBlock Text="Codex TPS" FontSize="16" FontWeight="SemiBold"/>
                     <StackPanel Orientation="Horizontal" Margin="0 2 0 0">
                         <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="#34C759" Margin="0 2 6 0"/>
-                        <TextBlock x:Name="StatusText" Text="Waiting..." FontSize="12" Foreground="#666666"/>
-                        <TextBlock Text=" | " FontSize="12" Foreground="#CCCCCC"/>
-                        <TextBlock x:Name="LastUpdateTimeText" Text="" FontSize="12" Foreground="#666666"/>
+                        <TextBlock x:Name="StatusText" Text="Waiting..." FontSize="12" Foreground="{DynamicResource PanelSecondaryTextBrush}"/>
+                        <TextBlock Text=" | " FontSize="12" Foreground="{DynamicResource PanelControlBorderBrush}"/>
+                        <TextBlock x:Name="LastUpdateTimeText" Text="" FontSize="12" Foreground="{DynamicResource PanelSecondaryTextBrush}"/>
                     </StackPanel>
                 </StackPanel>
 
@@ -92,7 +97,7 @@
                     <Button.ToolTip>
                         <ToolTip x:Name="RefreshTooltip" Content="Refresh"/>
                     </Button.ToolTip>
-                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE72C;" Foreground="#666666"/>
+                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE72C;" Foreground="{DynamicResource PanelIconBrush}"/>
                 </Button>
 
                 <Button Grid.Column="3" x:Name="OpenFolderButton" Width="32" Height="32" Margin="4"
@@ -101,12 +106,12 @@
                     <Button.ToolTip>
                         <ToolTip x:Name="OpenFolderTooltip" Content="Open Sessions Folder"/>
                     </Button.ToolTip>
-                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE838;" Foreground="#666666"/>
+                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE838;" Foreground="{DynamicResource PanelIconBrush}"/>
                 </Button>
             </Grid>
         </Border>
 
-        <Border Grid.Row="1" Margin="0 4 0 4" Background="#F5F5F5" CornerRadius="4">
+        <Border Grid.Row="1" Margin="0 4 0 4" Background="{DynamicResource PanelSubtleBackgroundBrush}" CornerRadius="4">
             <UniformGrid Columns="4">
                 <Button x:Name="Window1MinButton" Content="1 min" Margin="0" Padding="8 6"
                         Background="Transparent" BorderThickness="0"
@@ -127,7 +132,7 @@
             </UniformGrid>
         </Border>
 
-        <Border Grid.Row="2" BorderBrush="#E5E5E5" BorderThickness="0 0 0 1" Padding="0 0 0 8" Margin="0 4 0 4">
+        <Border Grid.Row="2" BorderBrush="{DynamicResource PanelDividerBrush}" BorderThickness="0 0 0 1" Padding="0 0 0 8" Margin="0 4 0 4">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -135,13 +140,13 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Vertical" HorizontalAlignment="Left">
-                    <TextBlock x:Name="TotalTpsValue" Text="0" FontSize="36" FontWeight="Bold" Foreground="#1A1A1A"/>
-                    <TextBlock x:Name="TokenPerSecondLabel" Text="token/s" FontSize="11" Foreground="#666666"/>
+                    <TextBlock x:Name="TotalTpsValue" Text="0" FontSize="36" FontWeight="Bold"/>
+                    <TextBlock x:Name="TokenPerSecondLabel" Text="token/s" FontSize="11" Foreground="{DynamicResource PanelSecondaryTextBrush}"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                    <TextBlock x:Name="RequestsValue" Text="0" FontSize="20" FontWeight="SemiBold" Foreground="#1A1A1A" TextAlignment="Right"/>
-                    <TextBlock x:Name="RequestsPerMinuteLabel" Text="Requests/min" FontSize="11" Foreground="#666666" TextAlignment="Right"/>
+                    <TextBlock x:Name="RequestsValue" Text="0" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="RequestsPerMinuteLabel" Text="Requests/min" FontSize="11" Foreground="{DynamicResource PanelSecondaryTextBrush}" TextAlignment="Right"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -157,37 +162,37 @@
             <StackPanel Grid.Column="0" Orientation="Vertical" HorizontalAlignment="Left">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                     <Ellipse Width="6" Height="6" Fill="#007AFF" Margin="0 0 4 0"/>
-                    <TextBlock x:Name="InputLabel" Text="Input" FontSize="11" Foreground="#666666"/>
+                    <TextBlock x:Name="InputLabel" Text="Input" FontSize="11" Foreground="{DynamicResource PanelSecondaryTextBrush}"/>
                 </StackPanel>
-                <TextBlock x:Name="InputValue" Text="0" FontSize="14" FontWeight="Medium" Foreground="#1A1A1A"/>
-                <TextBlock Text="token/s" FontSize="10" Foreground="#999999"/>
+                <TextBlock x:Name="InputValue" Text="0" FontSize="14" FontWeight="Medium"/>
+                <TextBlock Text="token/s" FontSize="10" Foreground="{DynamicResource PanelTertiaryTextBrush}"/>
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Left">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                     <Ellipse Width="6" Height="6" Fill="#34C759" Margin="0 0 4 0"/>
-                    <TextBlock x:Name="CachedLabel" Text="Cached" FontSize="11" Foreground="#666666"/>
+                    <TextBlock x:Name="CachedLabel" Text="Cached" FontSize="11" Foreground="{DynamicResource PanelSecondaryTextBrush}"/>
                 </StackPanel>
-                <TextBlock x:Name="CachedValue" Text="0" FontSize="14" FontWeight="Medium" Foreground="#1A1A1A"/>
-                <TextBlock Text="token/s" FontSize="10" Foreground="#999999"/>
+                <TextBlock x:Name="CachedValue" Text="0" FontSize="14" FontWeight="Medium"/>
+                <TextBlock Text="token/s" FontSize="10" Foreground="{DynamicResource PanelTertiaryTextBrush}"/>
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Vertical" HorizontalAlignment="Left">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                     <Ellipse Width="6" Height="6" Fill="#FF9500" Margin="0 0 4 0"/>
-                    <TextBlock x:Name="OutputLabel" Text="Output" FontSize="11" Foreground="#666666"/>
+                    <TextBlock x:Name="OutputLabel" Text="Output" FontSize="11" Foreground="{DynamicResource PanelSecondaryTextBrush}"/>
                 </StackPanel>
-                <TextBlock x:Name="OutputValue" Text="0" FontSize="14" FontWeight="Medium" Foreground="#1A1A1A"/>
-                <TextBlock Text="token/s" FontSize="10" Foreground="#999999"/>
+                <TextBlock x:Name="OutputValue" Text="0" FontSize="14" FontWeight="Medium"/>
+                <TextBlock Text="token/s" FontSize="10" Foreground="{DynamicResource PanelTertiaryTextBrush}"/>
             </StackPanel>
 
             <StackPanel Grid.Column="3" Orientation="Vertical" HorizontalAlignment="Left">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                     <Ellipse Width="6" Height="6" Fill="#AF52DE" Margin="0 0 4 0"/>
-                    <TextBlock x:Name="ReasoningLabel" Text="Reasoning" FontSize="11" Foreground="#666666"/>
+                    <TextBlock x:Name="ReasoningLabel" Text="Reasoning" FontSize="11" Foreground="{DynamicResource PanelSecondaryTextBrush}"/>
                 </StackPanel>
-                <TextBlock x:Name="ReasoningValue" Text="0" FontSize="14" FontWeight="Medium" Foreground="#1A1A1A"/>
-                <TextBlock Text="token/s" FontSize="10" Foreground="#999999"/>
+                <TextBlock x:Name="ReasoningValue" Text="0" FontSize="14" FontWeight="Medium"/>
+                <TextBlock Text="token/s" FontSize="10" Foreground="{DynamicResource PanelTertiaryTextBrush}"/>
             </StackPanel>
         </Grid>
 
@@ -200,17 +205,17 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Vertical" HorizontalAlignment="Left">
-                <TextBlock x:Name="ActiveSessionsLabel" Text="Active Sessions" FontSize="11" Foreground="#666666"/>
-                <TextBlock x:Name="ActiveSessionsValue" Text="0" FontSize="16" FontWeight="SemiBold" Foreground="#1A1A1A"/>
+                <TextBlock x:Name="ActiveSessionsLabel" Text="Active Sessions" FontSize="11" Foreground="{DynamicResource PanelSecondaryTextBrush}"/>
+                <TextBlock x:Name="ActiveSessionsValue" Text="0" FontSize="16" FontWeight="SemiBold"/>
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Left">
-                <TextBlock x:Name="CacheRatioLabel" Text="Cache Ratio" FontSize="11" Foreground="#666666"/>
-                <TextBlock x:Name="CacheRatioValue" Text="0%" FontSize="16" FontWeight="SemiBold" Foreground="#1A1A1A"/>
+                <TextBlock x:Name="CacheRatioLabel" Text="Cache Ratio" FontSize="11" Foreground="{DynamicResource PanelSecondaryTextBrush}"/>
+                <TextBlock x:Name="CacheRatioValue" Text="0%" FontSize="16" FontWeight="SemiBold"/>
             </StackPanel>
 
             <StackPanel Grid.Column="2" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                <TextBlock x:Name="RefreshCadenceLabel" Text="Refresh:" FontSize="11" Foreground="#666666" Margin="0 0 6 0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="RefreshCadenceLabel" Text="Refresh:" FontSize="11" Foreground="{DynamicResource PanelSecondaryTextBrush}" Margin="0 0 6 0" VerticalAlignment="Center"/>
                 <ComboBox x:Name="RefreshCadenceCombo" Width="78" Height="22"
                           SelectionChanged="RefreshCadenceCombo_SelectionChanged">
                     <ComboBoxItem Tag="FiveSeconds">5 sec</ComboBoxItem>

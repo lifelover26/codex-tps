@@ -44,8 +44,15 @@ public partial class MonitorPanelWindow : Window
         _viewModel = viewModel;
         DataContext = viewModel;
 
+        PanelThemeResources.Apply(Resources, EffectiveTheme.Light);
+
         Loaded += OnLoaded;
         Closing += OnClosing;
+    }
+
+    internal void ApplyTheme(EffectiveTheme theme)
+    {
+        PanelThemeResources.Apply(Resources, theme);
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -235,13 +242,13 @@ public partial class MonitorPanelWindow : Window
     {
         if (isSelected)
         {
-            button.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 122, 255));
-            button.Foreground = System.Windows.Media.Brushes.White;
+            button.SetResourceReference(System.Windows.Controls.Button.BackgroundProperty, "PanelAccentBrush");
+            button.SetResourceReference(System.Windows.Controls.Button.ForegroundProperty, "PanelAccentForegroundBrush");
         }
         else
         {
             button.Background = System.Windows.Media.Brushes.Transparent;
-            button.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(26, 26, 26));
+            button.SetResourceReference(System.Windows.Controls.Button.ForegroundProperty, "PanelPrimaryTextBrush");
         }
     }
 

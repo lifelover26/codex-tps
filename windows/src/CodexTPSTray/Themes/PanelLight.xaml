@@ -1,0 +1,21 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="PanelPrimaryTextBrush" Color="#1A1A1A"/>
+    <SolidColorBrush x:Key="PanelSecondaryTextBrush" Color="#666666"/>
+    <SolidColorBrush x:Key="PanelTertiaryTextBrush" Color="#999999"/>
+    <SolidColorBrush x:Key="PanelDividerBrush" Color="#E5E5E5"/>
+    <SolidColorBrush x:Key="PanelSubtleBackgroundBrush" Color="#F5F5F5"/>
+    <SolidColorBrush x:Key="PanelControlBackgroundBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="PanelControlBorderBrush" Color="#CCCCCC"/>
+    <SolidColorBrush x:Key="PanelHoverBackgroundBrush" Color="#E8F0FE"/>
+    <SolidColorBrush x:Key="PanelAccentBrush" Color="#007AFF"/>
+    <SolidColorBrush x:Key="PanelAccentForegroundBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="PanelDisabledBackgroundBrush" Color="#F5F5F5"/>
+    <SolidColorBrush x:Key="PanelDisabledForegroundBrush" Color="#999999"/>
+    <SolidColorBrush x:Key="PanelIconBrush" Color="#666666"/>
+    <SolidColorBrush x:Key="PanelTooltipBackgroundBrush" Color="#1A1A1A"/>
+    <SolidColorBrush x:Key="PanelTooltipForegroundBrush" Color="#FFFFFF"/>
+
+</ResourceDictionary>
