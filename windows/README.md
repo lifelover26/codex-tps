@@ -18,7 +18,7 @@ no installer or separately installed .NET runtime is required.
 
 ### Install and Run
 
-1. Download `Codex-TPS-Windows-x64-Portable-0.1.0.zip` and its `.sha256` file.
+1. Download `Codex-TPS-Windows-x64-Portable-0.1.1.zip` and its `.sha256` file.
 2. Verify the checksum before extracting the ZIP.
 3. Extract the ZIP to a stable writable directory, for example:
 
@@ -126,7 +126,7 @@ Existing settings remain in `%LOCALAPPDATA%\CodexTPS`.
 Do not run or extract the package if verification fails.
 
 ```powershell
-$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.1.0.zip"
+$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.1.1.zip"
 $checksumPath = "$zipPath.sha256"
 
 $expectedHash = (Get-Content $checksumPath -Raw).Split('  ')[0].Trim()
@@ -165,14 +165,14 @@ dotnet format .\windows\CodexTPS.slnx --verify-no-changes
 Create the x64 Portable release:
 
 ```powershell
-.\windows\scripts\New-Release.ps1 -Version 0.1.0
+.\windows\scripts\New-Release.ps1 -Version 0.1.1
 ```
 
 The script creates:
 
 ```text
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.1.0.zip
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.1.0.zip.sha256
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.1.1.zip
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.1.1.zip.sha256
 ```
 
 The ZIP contains exactly:
@@ -196,7 +196,7 @@ Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 tok
 
 ### 安装与启动
 
-1. 下载 `Codex-TPS-Windows-x64-Portable-0.1.0.zip` 和对应的 `.sha256`。
+1. 下载 `Codex-TPS-Windows-x64-Portable-0.1.1.zip` 和对应的 `.sha256`。
 2. 校验 SHA-256 后再解压。
 3. 解压到稳定且可写的目录，例如 `%USERPROFILE%\Apps\CodexTPS`。
 4. 运行 `CodexTPSTray.exe`。
@@ -280,7 +280,7 @@ Codex 在一次模型请求完成时记录 token 用量。因此这里显示的�
 dotnet build .\windows\CodexTPS.slnx
 dotnet test .\windows\CodexTPS.slnx
 dotnet format .\windows\CodexTPS.slnx --verify-no-changes
-.\windows\scripts\New-Release.ps1 -Version 0.1.0
+.\windows\scripts\New-Release.ps1 -Version 0.1.1
 ```
 
 发布脚本会生成 Portable ZIP 和对应的 SHA-256 文件。
