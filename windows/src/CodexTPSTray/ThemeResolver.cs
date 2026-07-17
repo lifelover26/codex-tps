@@ -47,6 +47,18 @@ internal sealed class WindowsSystemThemeSource : ISystemThemeSource
     }
 }
 
+internal sealed class ResolvedThemes
+{
+    public EffectiveTheme ApplicationTheme { get; }
+    public EffectiveTheme OverlayTheme { get; }
+
+    public ResolvedThemes(EffectiveTheme applicationTheme, EffectiveTheme overlayTheme)
+    {
+        ApplicationTheme = applicationTheme;
+        OverlayTheme = overlayTheme;
+    }
+}
+
 internal sealed class ThemeResolver
 {
     private readonly ISystemThemeSource _systemThemeSource;
@@ -77,5 +89,50 @@ internal sealed class ThemeResolver
             OverlayThemePreference.System => _systemThemeSource.GetCurrentTheme(),
             _ => ResolveApplication(applicationPreference)
         };
+    }
+
+    public ResolvedThemes ResolveBoth(
+        ApplicationThemePreference applicationPreference,
+        OverlayThemePreference overlayPreference)
+    {
+        EffectiveTheme? systemTheme = null;
+
+        EffectiveTheme applicationTheme = ResolveApplicationTheme(applicationPreference, ref systemTheme);
+        EffectiveTheme overlayTheme = ResolveOverlayTheme(overlayPreference, applicationTheme, ref systemTheme);
+
+        return new ResolvedThemes(applicationTheme, overlayTheme);
+    }
+
+    private EffectiveTheme ResolveApplicationTheme(ApplicationThemePreference preference, ref EffectiveTheme? systemTheme)
+    {
+        return preference switch
+        {
+            ApplicationThemePreference.Light => EffectiveTheme.Light,
+            ApplicationThemePreference.Dark => EffectiveTheme.Dark,
+            _ => GetSystemTheme(ref systemTheme)
+        };
+    }
+
+    private EffectiveTheme ResolveOverlayTheme(
+        OverlayThemePreference overlayPreference,
+        EffectiveTheme resolvedApplicationTheme,
+        ref EffectiveTheme? systemTheme)
+    {
+        return overlayPreference switch
+        {
+            OverlayThemePreference.Light => EffectiveTheme.Light,
+            OverlayThemePreference.Dark => EffectiveTheme.Dark,
+            OverlayThemePreference.System => GetSystemTheme(ref systemTheme),
+            _ => resolvedApplicationTheme
+        };
+    }
+
+    private EffectiveTheme GetSystemTheme(ref EffectiveTheme? systemTheme)
+    {
+        if (systemTheme == null)
+        {
+            systemTheme = _systemThemeSource.GetCurrentTheme();
+        }
+        return systemTheme.Value;
     }
 }

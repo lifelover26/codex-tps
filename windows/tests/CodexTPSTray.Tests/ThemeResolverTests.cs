@@ -213,6 +213,70 @@ public class ThemeResolverTests
 
         Assert.Equal(1, _systemSource.CallCount);
     }
+
+    [Fact]
+    public void ResolveBoth_AppSystem_OverlaySystem_Dark_DarkDark_OneCall()
+    {
+        _systemSource.ReturnValue = EffectiveTheme.Dark;
+        var resolver = new ThemeResolver(_systemSource);
+
+        var result = resolver.ResolveBoth(ApplicationThemePreference.System, OverlayThemePreference.System);
+
+        Assert.Equal(EffectiveTheme.Dark, result.ApplicationTheme);
+        Assert.Equal(EffectiveTheme.Dark, result.OverlayTheme);
+        Assert.Equal(1, _systemSource.CallCount);
+    }
+
+    [Fact]
+    public void ResolveBoth_AppLight_OverlaySystem_Dark_LightDark_OneCall()
+    {
+        _systemSource.ReturnValue = EffectiveTheme.Dark;
+        var resolver = new ThemeResolver(_systemSource);
+
+        var result = resolver.ResolveBoth(ApplicationThemePreference.Light, OverlayThemePreference.System);
+
+        Assert.Equal(EffectiveTheme.Light, result.ApplicationTheme);
+        Assert.Equal(EffectiveTheme.Dark, result.OverlayTheme);
+        Assert.Equal(1, _systemSource.CallCount);
+    }
+
+    [Fact]
+    public void ResolveBoth_AppUnknown_OverlayFollowApplication_Dark_DarkDark_OneCall()
+    {
+        _systemSource.ReturnValue = EffectiveTheme.Dark;
+        var resolver = new ThemeResolver(_systemSource);
+
+        var result = resolver.ResolveBoth((ApplicationThemePreference)99, OverlayThemePreference.FollowApplication);
+
+        Assert.Equal(EffectiveTheme.Dark, result.ApplicationTheme);
+        Assert.Equal(EffectiveTheme.Dark, result.OverlayTheme);
+        Assert.Equal(1, _systemSource.CallCount);
+    }
+
+    [Fact]
+    public void ResolveBoth_AppUnknown_OverlaySystem_Dark_DarkDark_OneCall()
+    {
+        _systemSource.ReturnValue = EffectiveTheme.Dark;
+        var resolver = new ThemeResolver(_systemSource);
+
+        var result = resolver.ResolveBoth((ApplicationThemePreference)99, OverlayThemePreference.System);
+
+        Assert.Equal(EffectiveTheme.Dark, result.ApplicationTheme);
+        Assert.Equal(EffectiveTheme.Dark, result.OverlayTheme);
+        Assert.Equal(1, _systemSource.CallCount);
+    }
+
+    [Fact]
+    public void ResolveBoth_AppDark_OverlayUnknown_DarkDark_NoCall()
+    {
+        var resolver = new ThemeResolver(_systemSource);
+
+        var result = resolver.ResolveBoth(ApplicationThemePreference.Dark, (OverlayThemePreference)99);
+
+        Assert.Equal(EffectiveTheme.Dark, result.ApplicationTheme);
+        Assert.Equal(EffectiveTheme.Dark, result.OverlayTheme);
+        Assert.Equal(0, _systemSource.CallCount);
+    }
 }
 
 public class WindowsSystemThemeSourceTests

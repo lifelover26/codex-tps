@@ -24,6 +24,8 @@ public class TrayIconManager : IDisposable
     private MonitorPanelSettingsSynchronizer? _settingsSynchronizer;
     private OverlayWindow? _overlayWindow;
     private OverlayLifecycleCoordinator? _overlayLifecycle;
+    private ThemeApplicationCoordinator? _themeCoordinator;
+    private ThemeApplicationTarget? _themeTarget;
 
     private UsageSnapshot? _latestSnapshot;
     private TraySettings _currentSettings;
@@ -88,6 +90,11 @@ public class TrayIconManager : IDisposable
         _refreshSemaphore = new SemaphoreSlim(1, 1);
 
         _settingsSynchronizer = new MonitorPanelSettingsSynchronizer(_currentSettings);
+
+        _themeTarget = new ThemeApplicationTarget(this);
+        var systemThemeSource = new WindowsSystemThemeSource();
+        var themeResolver = new ThemeResolver(systemThemeSource);
+        _themeCoordinator = new ThemeApplicationCoordinator(themeResolver, _themeTarget);
     }
 
     public void Start()
@@ -105,6 +112,8 @@ public class TrayIconManager : IDisposable
     {
         _overlayWindow = new OverlayWindow(_workAreaProvider);
         _overlayWindow.DragCompleted += OnOverlayDragCompleted;
+
+        _themeCoordinator?.Apply(_currentSettings);
 
         var windowAdapter = new OverlayWindowAdapter(_overlayWindow);
         var dispatcher = new WpfDispatcher();
@@ -128,6 +137,29 @@ public class TrayIconManager : IDisposable
         public void UpdateSettings(TraySettings settings) => _window.UpdateSettings(settings);
 
         public void ResetPosition(double? left, double? top) => _window.ResetPosition(left, top);
+    }
+
+    private sealed class ThemeApplicationTarget : IThemeApplicationTarget
+    {
+        private readonly TrayIconManager _manager;
+
+        public ThemeApplicationTarget(TrayIconManager manager) => _manager = manager;
+
+        public void ApplyApplicationTheme(EffectiveTheme theme)
+        {
+            if (_manager._monitorPanel != null)
+            {
+                _manager._monitorPanel.ApplyTheme(theme);
+            }
+        }
+
+        public void ApplyOverlayTheme(EffectiveTheme theme)
+        {
+            if (_manager._overlayWindow != null)
+            {
+                _manager._overlayWindow.ApplyTheme(theme);
+            }
+        }
     }
 
     private void UpdateOverlayContent()
@@ -355,6 +387,7 @@ public class TrayIconManager : IDisposable
                 _monitorPanel.UpdateSnapshot(_latestSnapshot.Value);
             }
 
+            _monitorPanel.ApplyTheme(_themeCoordinator?.CurrentApplicationTheme ?? EffectiveTheme.Light);
             _monitorPanel.ShowNearTray();
         }
     }
