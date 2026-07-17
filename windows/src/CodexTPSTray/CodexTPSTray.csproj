@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CodexTPSCore\CodexTPSCore.csproj" />
+    <InternalsVisibleTo Include="CodexTPSTray.Tests" />
   </ItemGroup>
 
   <ItemGroup>

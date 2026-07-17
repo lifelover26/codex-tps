@@ -21,7 +21,7 @@ public class TrayIconManager : IDisposable
     private readonly IMonitorWorkAreaProvider _workAreaProvider;
 
     private MonitorPanelWindow? _monitorPanel;
-    private MonitorPanelViewModel? _monitorPanelViewModel;
+    private MonitorPanelSettingsSynchronizer? _settingsSynchronizer;
     private OverlayWindow? _overlayWindow;
 
     private UsageSnapshot? _latestSnapshot;
@@ -86,7 +86,7 @@ public class TrayIconManager : IDisposable
         _refreshTimer.Tick += OnRefreshTimerTick;
         _refreshSemaphore = new SemaphoreSlim(1, 1);
 
-        _monitorPanelViewModel = new MonitorPanelViewModel(_currentSettings);
+        _settingsSynchronizer = new MonitorPanelSettingsSynchronizer(_currentSettings);
     }
 
     public void Start()
@@ -348,11 +348,12 @@ public class TrayIconManager : IDisposable
 
         if (_monitorPanel == null)
         {
-            _monitorPanel = new MonitorPanelWindow(_monitorPanelViewModel!);
+            _monitorPanel = new MonitorPanelWindow(_settingsSynchronizer!.ViewModel);
             _monitorPanel.RefreshRequested += () => _ = RefreshAsync();
             _monitorPanel.OpenFolderRequested += () => OnOpenSessionsFolderClicked(null, EventArgs.Empty);
             _monitorPanel.MetricWindowChanged += OnMetricWindowSelected;
             _monitorPanel.RefreshCadenceChanged += OnRefreshCadenceSelected;
+            _settingsSynchronizer.AttachPanelUpdater(_monitorPanel.UpdateSettings);
         }
 
         if (_monitorPanel.IsVisible)
@@ -386,7 +387,7 @@ public class TrayIconManager : IDisposable
 
         UpdateMenuLocalization();
         UpdateMenuCheckmarks();
-        _monitorPanel?.UpdateSettings(_currentSettings);
+        ApplySettingsToViewModelAndPanel();
         _overlayWindow?.UpdateSettings(_currentSettings);
 
         UpdateOverlayContent();
@@ -542,7 +543,7 @@ public class TrayIconManager : IDisposable
         _settingsStore.TrySave(_currentSettings);
 
         UpdateMenuCheckmarks();
-        _monitorPanel?.UpdateSettings(_currentSettings);
+        ApplySettingsToViewModelAndPanel();
         _overlayWindow?.UpdateSettings(_currentSettings);
 
         UpdateOverlayContent();
@@ -562,11 +563,16 @@ public class TrayIconManager : IDisposable
         _settingsStore.TrySave(_currentSettings);
 
         UpdateMenuCheckmarks();
-        _monitorPanel?.UpdateSettings(_currentSettings);
+        ApplySettingsToViewModelAndPanel();
 
         _refreshTimer.Stop();
         _refreshTimer.Interval = cadence.ToTimeSpan();
         _refreshTimer.Start();
+    }
+
+    private void ApplySettingsToViewModelAndPanel()
+    {
+        _settingsSynchronizer?.Apply(_currentSettings);
     }
 
     private void OnOpenSessionsFolderClicked(object? sender, EventArgs e)
