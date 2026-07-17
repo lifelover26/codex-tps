@@ -17,5 +17,7 @@
     <SolidColorBrush x:Key="PanelIconBrush" Color="#666666"/>
     <SolidColorBrush x:Key="PanelTooltipBackgroundBrush" Color="#1A1A1A"/>
     <SolidColorBrush x:Key="PanelTooltipForegroundBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="PanelComboBoxSelectedBackgroundBrush" Color="#E8F0FE"/>
+    <SolidColorBrush x:Key="PanelComboBoxSelectedForegroundBrush" Color="#1A1A1A"/>
 
 </ResourceDictionary>
