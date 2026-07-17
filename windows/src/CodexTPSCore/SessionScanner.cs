@@ -119,35 +119,28 @@ public class SessionScanner
         var cutoff = now.AddSeconds(-_activeFileHorizonSeconds);
         var files = new List<SessionFile>();
 
-        for (int dayOffset = -1; dayOffset <= 0; dayOffset++)
+        var options = new EnumerationOptions
         {
-            var targetDate = now.AddDays(dayOffset);
-            var dirPath = Path.Combine(
-                SessionsRoot,
-                targetDate.Year.ToString("D4"),
-                targetDate.Month.ToString("D2"),
-                targetDate.Day.ToString("D2")
-            );
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            ReturnSpecialDirectories = false,
+            MatchCasing = MatchCasing.CaseInsensitive,
+            AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint
+        };
 
-            if (!Directory.Exists(dirPath))
+        var sessionsDir = new DirectoryInfo(SessionsRoot);
+        foreach (var fileInfo in sessionsDir.EnumerateFiles("*.jsonl", options))
+        {
+            var modifiedAt = fileInfo.LastWriteTimeUtc;
+            if (modifiedAt >= cutoff)
             {
-                continue;
-            }
-
-            var candidates = Directory.GetFiles(dirPath, "*.jsonl");
-            foreach (var file in candidates)
-            {
-                var info = new FileInfo(file);
-                var modifiedAt = info.LastWriteTimeUtc;
-                bool hasCursor = _cursors.ContainsKey(file);
-                if (modifiedAt >= cutoff || hasCursor)
-                {
-                    files.Add(new SessionFile(file, info.Length, modifiedAt));
-                }
+                files.Add(new SessionFile(fileInfo.FullName, fileInfo.Length, modifiedAt));
             }
         }
 
-        return files.OrderBy(f => Path.GetFileName(f.Path), StringComparer.Ordinal).ToList();
+        return files.OrderBy(f => Path.GetFileName(f.Path), StringComparer.Ordinal)
+                    .ThenBy(f => f.Path, StringComparer.Ordinal)
+                    .ToList();
     }
 
     private void ReadAppendedContent(SessionFile file, DateTimeOffset retentionStart)

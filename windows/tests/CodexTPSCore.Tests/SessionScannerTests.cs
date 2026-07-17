@@ -160,4 +160,195 @@ public class SessionScannerTests
             try { Directory.Delete(tempRoot, true); } catch { }
         }
     }
+
+    [Fact]
+    public void TestScannerFindsActiveOldDateFile()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "codex-tps-tests-" + Guid.NewGuid().ToString());
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var oldDate = now.AddDays(-3);
+            var oldYear = oldDate.Year.ToString("D4");
+            var oldMonth = oldDate.Month.ToString("D2");
+            var oldDay = oldDate.Day.ToString("D2");
+
+            var sessionsDir = Path.Combine(tempRoot, "sessions", oldYear, oldMonth, oldDay);
+            Directory.CreateDirectory(sessionsDir);
+
+            var logFile = Path.Combine(sessionsDir, "rollout-session-a.jsonl");
+            string timestamp = now.AddSeconds(-20).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+
+            var lines = new[]
+            {
+                """{"timestamp":"TS","type":"session_meta","payload":{"id":"session-a","model_provider":"test-provider"}}""".Replace("TS", timestamp),
+                """{"timestamp":"TS","type":"turn_context","payload":{"model":"gpt-test"}}""".Replace("TS", timestamp),
+                """{"timestamp":"TS","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120},"last_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}}""".Replace("TS", timestamp)
+            };
+            File.WriteAllText(logFile, string.Join("\n", lines) + "\n", Utf8NoBom);
+
+            File.SetLastWriteTimeUtc(logFile, now.UtcDateTime.AddSeconds(-10));
+
+            var scanner = new SessionScanner(tempRoot);
+            var snapshot = scanner.Refresh(now);
+
+            Assert.Equal(120, snapshot.OneMinute.TotalTokens);
+            Assert.Equal(1, snapshot.OneMinute.RequestCount);
+            Assert.Equal(1, snapshot.ActiveSessions);
+        }
+        finally
+        {
+            try { Directory.Delete(tempRoot, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void TestScannerSkipsStaleOldDateFile()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "codex-tps-tests-" + Guid.NewGuid().ToString());
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var oldDate = now.AddDays(-3);
+            var oldYear = oldDate.Year.ToString("D4");
+            var oldMonth = oldDate.Month.ToString("D2");
+            var oldDay = oldDate.Day.ToString("D2");
+
+            var sessionsDir = Path.Combine(tempRoot, "sessions", oldYear, oldMonth, oldDay);
+            Directory.CreateDirectory(sessionsDir);
+
+            var logFile = Path.Combine(sessionsDir, "rollout-session-a.jsonl");
+            string timestamp = now.AddSeconds(-20).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+
+            var lines = new[]
+            {
+                """{"timestamp":"TS","type":"session_meta","payload":{"id":"session-a","model_provider":"test-provider"}}""".Replace("TS", timestamp),
+                """{"timestamp":"TS","type":"turn_context","payload":{"model":"gpt-test"}}""".Replace("TS", timestamp),
+                """{"timestamp":"TS","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120},"last_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}}""".Replace("TS", timestamp)
+            };
+            File.WriteAllText(logFile, string.Join("\n", lines) + "\n", Utf8NoBom);
+
+            File.SetLastWriteTimeUtc(logFile, now.UtcDateTime.AddHours(-2));
+
+            var scanner = new SessionScanner(tempRoot);
+            var snapshot = scanner.Refresh(now);
+
+            Assert.Equal(0, snapshot.OneMinute.TotalTokens);
+            Assert.Equal(0, snapshot.OneMinute.RequestCount);
+            Assert.Equal(0, snapshot.ActiveSessions);
+        }
+        finally
+        {
+            try { Directory.Delete(tempRoot, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void TestScannerHandlesIncrementalOldDateAppend()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "codex-tps-tests-" + Guid.NewGuid().ToString());
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var oldDate = now.AddDays(-3);
+            var oldYear = oldDate.Year.ToString("D4");
+            var oldMonth = oldDate.Month.ToString("D2");
+            var oldDay = oldDate.Day.ToString("D2");
+
+            var sessionsDir = Path.Combine(tempRoot, "sessions", oldYear, oldMonth, oldDay);
+            Directory.CreateDirectory(sessionsDir);
+
+            var logFile = Path.Combine(sessionsDir, "rollout-session-a.jsonl");
+            string firstTimestamp = now.AddSeconds(-20).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+            string secondTimestamp = now.AddSeconds(-5).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+
+            var initialLines = new[]
+            {
+                """{"timestamp":"TS","type":"session_meta","payload":{"id":"session-a","model_provider":"test-provider"}}""".Replace("TS", firstTimestamp),
+                """{"timestamp":"TS","type":"turn_context","payload":{"model":"gpt-test"}}""".Replace("TS", firstTimestamp),
+                """{"timestamp":"TS","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120},"last_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}}""".Replace("TS", firstTimestamp)
+            };
+            File.WriteAllText(logFile, string.Join("\n", initialLines) + "\n", Utf8NoBom);
+            File.SetLastWriteTimeUtc(logFile, now.UtcDateTime.AddSeconds(-15));
+
+            var scanner = new SessionScanner(tempRoot);
+            var firstSnapshot = scanner.Refresh(now);
+            Assert.Equal(120, firstSnapshot.OneMinute.TotalTokens);
+            Assert.Equal(1, firstSnapshot.OneMinute.RequestCount);
+
+            var appendLine = """{"timestamp":"TS","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":150,"output_tokens":30,"total_tokens":180},"last_token_usage":{"input_tokens":50,"output_tokens":10,"total_tokens":60}}}}""".Replace("TS", secondTimestamp) + "\n";
+            File.AppendAllText(logFile, appendLine, Utf8NoBom);
+            File.SetLastWriteTimeUtc(logFile, now.UtcDateTime.AddSeconds(-3));
+
+            var secondSnapshot = scanner.Refresh(now);
+            Assert.Equal(180, secondSnapshot.OneMinute.TotalTokens);
+            Assert.Equal(2, secondSnapshot.OneMinute.RequestCount);
+
+            var unchangedSnapshot = scanner.Refresh(now);
+            Assert.Equal(180, unchangedSnapshot.OneMinute.TotalTokens);
+            Assert.Equal(2, unchangedSnapshot.OneMinute.RequestCount);
+        }
+        finally
+        {
+            try { Directory.Delete(tempRoot, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void TestScannerExcludesStaleFileWithCursor()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "codex-tps-tests-" + Guid.NewGuid().ToString());
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var oldDate = now.AddDays(-3);
+            var oldYear = oldDate.Year.ToString("D4");
+            var oldMonth = oldDate.Month.ToString("D2");
+            var oldDay = oldDate.Day.ToString("D2");
+
+            var sessionsDir = Path.Combine(tempRoot, "sessions", oldYear, oldMonth, oldDay);
+            Directory.CreateDirectory(sessionsDir);
+
+            var logFile = Path.Combine(sessionsDir, "rollout-session-a.jsonl");
+            string firstTimestamp = now.AddSeconds(-20).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+            string secondTimestamp = now.AddSeconds(-5).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+
+            var initialLines = new[]
+            {
+                """{"timestamp":"TS","type":"session_meta","payload":{"id":"session-a","model_provider":"test-provider"}}""".Replace("TS", firstTimestamp),
+                """{"timestamp":"TS","type":"turn_context","payload":{"model":"gpt-test"}}""".Replace("TS", firstTimestamp),
+                """{"timestamp":"TS","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120},"last_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}}""".Replace("TS", firstTimestamp)
+            };
+            File.WriteAllText(logFile, string.Join("\n", initialLines) + "\n", Utf8NoBom);
+            File.SetLastWriteTimeUtc(logFile, now.UtcDateTime.AddSeconds(-10));
+
+            var scanner = new SessionScanner(tempRoot);
+            var firstSnapshot = scanner.Refresh(now);
+            Assert.Equal(120, firstSnapshot.OneMinute.TotalTokens);
+            Assert.Equal(1, firstSnapshot.OneMinute.RequestCount);
+
+            var appendLine = """{"timestamp":"TS","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":150,"output_tokens":30,"total_tokens":180},"last_token_usage":{"input_tokens":50,"output_tokens":10,"total_tokens":60}}}}""".Replace("TS", secondTimestamp) + "\n";
+            File.AppendAllText(logFile, appendLine, Utf8NoBom);
+
+            File.SetLastWriteTimeUtc(logFile, now.UtcDateTime.AddHours(-2));
+
+            var staleSnapshot = scanner.Refresh(now);
+            Assert.Equal(120, staleSnapshot.OneMinute.TotalTokens);
+            Assert.Equal(1, staleSnapshot.OneMinute.RequestCount);
+
+            File.SetLastWriteTimeUtc(logFile, now.UtcDateTime.AddSeconds(-3));
+
+            var resumedSnapshot = scanner.Refresh(now);
+            Assert.Equal(180, resumedSnapshot.OneMinute.TotalTokens);
+            Assert.Equal(2, resumedSnapshot.OneMinute.RequestCount);
+
+            var finalSnapshot = scanner.Refresh(now);
+            Assert.Equal(180, finalSnapshot.OneMinute.TotalTokens);
+            Assert.Equal(2, finalSnapshot.OneMinute.RequestCount);
+        }
+        finally
+        {
+            try { Directory.Delete(tempRoot, true); } catch { }
+        }
+    }
 }
