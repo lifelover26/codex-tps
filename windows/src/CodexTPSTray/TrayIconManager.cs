@@ -23,6 +23,7 @@ public class TrayIconManager : IDisposable
     private MonitorPanelWindow? _monitorPanel;
     private MonitorPanelSettingsSynchronizer? _settingsSynchronizer;
     private OverlayWindow? _overlayWindow;
+    private OverlayLifecycleCoordinator? _overlayLifecycle;
 
     private UsageSnapshot? _latestSnapshot;
     private TraySettings _currentSettings;
@@ -104,35 +105,29 @@ public class TrayIconManager : IDisposable
     {
         _overlayWindow = new OverlayWindow(_workAreaProvider);
         _overlayWindow.DragCompleted += OnOverlayDragCompleted;
-        _overlayWindow.UpdateSettings(_currentSettings);
 
-        if (_currentSettings.OverlayEnabled)
-        {
-            ShowOverlay();
-        }
+        var windowAdapter = new OverlayWindowAdapter(_overlayWindow);
+        var dispatcher = new WpfDispatcher();
+        _overlayLifecycle = new OverlayLifecycleCoordinator(windowAdapter, dispatcher);
+
+        _overlayLifecycle.Initialize(_currentSettings);
     }
 
-    private void ShowOverlay()
+    private sealed class OverlayWindowAdapter : IOverlayWindowAdapter
     {
-        if (_overlayWindow == null || _isShuttingDown)
-            return;
+        private readonly OverlayWindow _window;
 
-        _overlayWindow.UpdateSettings(_currentSettings);
-        _overlayWindow.Show();
-        _overlayWindow.ResetPosition(_currentSettings.OverlayLeft, _currentSettings.OverlayTop);
+        public OverlayWindowAdapter(OverlayWindow window) => _window = window;
 
-        if (_latestSnapshot.HasValue)
-        {
-            UpdateOverlayContent();
-        }
-    }
+        public bool IsVisible => _window.IsVisible;
 
-    private void HideOverlay()
-    {
-        if (_overlayWindow == null)
-            return;
+        public void Show() => _window.Show();
 
-        _overlayWindow.Hide();
+        public void Hide() => _window.Hide();
+
+        public void UpdateSettings(TraySettings settings) => _window.UpdateSettings(settings);
+
+        public void ResetPosition(double? left, double? top) => _window.ResetPosition(left, top);
     }
 
     private void UpdateOverlayContent()
@@ -259,14 +254,7 @@ public class TrayIconManager : IDisposable
         _currentSettings = _currentSettings with { OverlayEnabled = enabled };
         _settingsStore.TrySave(_currentSettings);
 
-        if (enabled)
-        {
-            ShowOverlay();
-        }
-        else
-        {
-            HideOverlay();
-        }
+        _overlayLifecycle?.SetEnabled(_currentSettings);
     }
 
     private void OnLockOverlayClicked(object? sender, EventArgs e)
@@ -486,6 +474,7 @@ public class TrayIconManager : IDisposable
 
                     _latestSnapshot = snapshot;
                     UpdateUI(snapshot);
+                    _overlayLifecycle?.EnsureVisible(_currentSettings);
                     UpdateOverlayContent();
 
                     _monitorPanel?.UpdateSnapshot(snapshot);
@@ -659,6 +648,7 @@ public class TrayIconManager : IDisposable
 
         _refreshTimer.Stop();
 
+        _overlayLifecycle?.PrepareForShutdown();
         _overlayWindow?.PrepareForShutdown();
         _monitorPanel?.PrepareForShutdown();
 
@@ -682,6 +672,9 @@ public class TrayIconManager : IDisposable
         if (disposing)
         {
             _refreshTimer.Stop();
+
+            _overlayLifecycle?.PrepareForShutdown();
+            _overlayLifecycle = null;
 
             _overlayWindow?.PrepareForShutdown();
             _overlayWindow = null;
