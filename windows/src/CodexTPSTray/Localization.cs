@@ -345,4 +345,37 @@ public static class Localization
     {
         return language == Language.Chinese ? "重置悬浮窗位置" : "Reset Overlay Position";
     }
+
+    public static string ThemeMenu(Language language)
+    {
+        return language == Language.Chinese ? "主题" : "Theme";
+    }
+
+    public static string OverlayThemeMenu(Language language)
+    {
+        return language == Language.Chinese ? "主题" : "Theme";
+    }
+
+    public static string GetApplicationThemeDisplayName(ApplicationThemePreference preference, Language language)
+    {
+        return preference switch
+        {
+            ApplicationThemePreference.System => language == Language.Chinese ? "跟随系统" : "System",
+            ApplicationThemePreference.Light => language == Language.Chinese ? "浅色" : "Light",
+            ApplicationThemePreference.Dark => language == Language.Chinese ? "深色" : "Dark",
+            _ => language == Language.Chinese ? "跟随系统" : "System"
+        };
+    }
+
+    public static string GetOverlayThemeDisplayName(OverlayThemePreference preference, Language language)
+    {
+        return preference switch
+        {
+            OverlayThemePreference.FollowApplication => language == Language.Chinese ? "跟随应用" : "Follow Application",
+            OverlayThemePreference.System => language == Language.Chinese ? "跟随系统" : "System",
+            OverlayThemePreference.Light => language == Language.Chinese ? "浅色" : "Light",
+            OverlayThemePreference.Dark => language == Language.Chinese ? "深色" : "Dark",
+            _ => language == Language.Chinese ? "跟随应用" : "Follow Application"
+        };
+    }
 }

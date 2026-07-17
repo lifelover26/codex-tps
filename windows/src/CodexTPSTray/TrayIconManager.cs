@@ -62,6 +62,11 @@ public class TrayIconManager : IDisposable
     private readonly ToolStripMenuItem _lockOverlayMenuItem = new() { CheckOnClick = true };
     private readonly ToolStripMenuItem _resetOverlayPositionMenuItem = new();
     private readonly ToolStripMenuItem _overlaySubmenu = new();
+    private readonly ToolStripMenuItem _overlayThemeSubmenu = new();
+
+    private readonly Dictionary<ApplicationThemePreference, ToolStripMenuItem> _applicationThemeMenuItems = new();
+    private readonly Dictionary<OverlayThemePreference, ToolStripMenuItem> _overlayThemeMenuItems = new();
+    private readonly ToolStripMenuItem _themeSubmenu = new();
 
     public TrayIconManager() : this(
         TraySettingsStore.CreateDefault(),
@@ -246,9 +251,31 @@ public class TrayIconManager : IDisposable
         _resetOverlayPositionMenuItem.Click += OnResetOverlayPositionClicked;
         _overlaySubmenu.DropDownItems.Add(_resetOverlayPositionMenuItem);
 
+        _overlaySubmenu.DropDownItems.Add(new ToolStripSeparator());
+
+        _overlayThemeSubmenu.Text = Localization.OverlayThemeMenu(_currentSettings.Language);
+        foreach (OverlayThemePreference preference in Enum.GetValues<OverlayThemePreference>())
+        {
+            var item = new ToolStripMenuItem(Localization.GetOverlayThemeDisplayName(preference, _currentSettings.Language));
+            item.Click += (sender, e) => OnOverlayThemeSelected(preference);
+            _overlayThemeMenuItems[preference] = item;
+            _overlayThemeSubmenu.DropDownItems.Add(item);
+        }
+        _overlaySubmenu.DropDownItems.Add(_overlayThemeSubmenu);
+
         contextMenu.Items.Add(_overlaySubmenu);
 
         contextMenu.Items.Add(new ToolStripSeparator());
+
+        _themeSubmenu.Text = Localization.ThemeMenu(_currentSettings.Language);
+        foreach (ApplicationThemePreference preference in Enum.GetValues<ApplicationThemePreference>())
+        {
+            var item = new ToolStripMenuItem(Localization.GetApplicationThemeDisplayName(preference, _currentSettings.Language));
+            item.Click += (sender, e) => OnApplicationThemeSelected(preference);
+            _applicationThemeMenuItems[preference] = item;
+            _themeSubmenu.DropDownItems.Add(item);
+        }
+        contextMenu.Items.Add(_themeSubmenu);
 
         _languageSubmenu.Text = Localization.LanguageMenu(_currentSettings.Language);
 
@@ -447,6 +474,18 @@ public class TrayIconManager : IDisposable
         _showOverlayMenuItem.Text = Localization.ShowOverlayMenu(language);
         _lockOverlayMenuItem.Text = Localization.LockOverlayMenu(language);
         _resetOverlayPositionMenuItem.Text = Localization.ResetOverlayPositionMenu(language);
+
+        _themeSubmenu.Text = Localization.ThemeMenu(language);
+        foreach (var kvp in _applicationThemeMenuItems)
+        {
+            kvp.Value.Text = Localization.GetApplicationThemeDisplayName(kvp.Key, language);
+        }
+
+        _overlayThemeSubmenu.Text = Localization.OverlayThemeMenu(language);
+        foreach (var kvp in _overlayThemeMenuItems)
+        {
+            kvp.Value.Text = Localization.GetOverlayThemeDisplayName(kvp.Key, language);
+        }
     }
 
     private void OnLaunchAtLoginRequested(bool enabled)
@@ -592,6 +631,30 @@ public class TrayIconManager : IDisposable
         _refreshTimer.Start();
     }
 
+    private void OnApplicationThemeSelected(ApplicationThemePreference preference)
+    {
+        if (_isShuttingDown)
+            return;
+
+        _currentSettings = _currentSettings with { ApplicationTheme = preference };
+        _settingsStore.TrySave(_currentSettings);
+
+        _themeCoordinator?.Apply(_currentSettings);
+        UpdateMenuCheckmarks();
+    }
+
+    private void OnOverlayThemeSelected(OverlayThemePreference preference)
+    {
+        if (_isShuttingDown)
+            return;
+
+        _currentSettings = _currentSettings with { OverlayTheme = preference };
+        _settingsStore.TrySave(_currentSettings);
+
+        _themeCoordinator?.Apply(_currentSettings);
+        UpdateMenuCheckmarks();
+    }
+
     private void ApplySettingsToViewModelAndPanel()
     {
         _settingsSynchronizer?.Apply(_currentSettings);
@@ -665,6 +728,33 @@ public class TrayIconManager : IDisposable
 
         _showOverlayMenuItem.Checked = _currentSettings.OverlayEnabled;
         _lockOverlayMenuItem.Checked = _currentSettings.OverlayLocked;
+
+        var applicationTheme = _currentSettings.ApplicationTheme switch
+        {
+            ApplicationThemePreference.System => ApplicationThemePreference.System,
+            ApplicationThemePreference.Light => ApplicationThemePreference.Light,
+            ApplicationThemePreference.Dark => ApplicationThemePreference.Dark,
+            _ => ApplicationThemePreference.System
+        };
+
+        foreach (var kvp in _applicationThemeMenuItems)
+        {
+            kvp.Value.Checked = kvp.Key == applicationTheme;
+        }
+
+        var overlayTheme = _currentSettings.OverlayTheme switch
+        {
+            OverlayThemePreference.FollowApplication => OverlayThemePreference.FollowApplication,
+            OverlayThemePreference.System => OverlayThemePreference.System,
+            OverlayThemePreference.Light => OverlayThemePreference.Light,
+            OverlayThemePreference.Dark => OverlayThemePreference.Dark,
+            _ => OverlayThemePreference.FollowApplication
+        };
+
+        foreach (var kvp in _overlayThemeMenuItems)
+        {
+            kvp.Value.Checked = kvp.Key == overlayTheme;
+        }
     }
 
     private void OnExitClicked(object? sender, EventArgs e)
