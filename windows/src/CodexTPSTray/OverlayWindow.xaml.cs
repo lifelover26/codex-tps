@@ -52,9 +52,16 @@ public partial class OverlayWindow : Window
         InitializeComponent();
         _workAreaProvider = workAreaProvider;
 
+        OverlayThemeResources.Apply(Resources, EffectiveTheme.Dark);
+
         Loaded += OnLoaded;
         Closing += OnClosing;
         MouseLeftButtonDown += OnMouseLeftButtonDown;
+    }
+
+    internal void ApplyTheme(EffectiveTheme theme)
+    {
+        OverlayThemeResources.Apply(Resources, theme);
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)

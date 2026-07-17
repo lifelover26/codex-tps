@@ -1,0 +1,8 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush x:Key="OverlayBackgroundBrush" Color="#CCF0F0F0"/>
+    <SolidColorBrush x:Key="OverlayPrimaryTextBrush" Color="#1A1A1A"/>
+    <SolidColorBrush x:Key="OverlaySecondaryTextBrush" Color="#333333"/>
+
+</ResourceDictionary>
