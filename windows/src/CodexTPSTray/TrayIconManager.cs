@@ -28,6 +28,7 @@ public class TrayIconManager : IDisposable
     private ThemeApplicationTarget? _themeTarget;
     private readonly IWinFormsThemeApplier _winFormsThemeApplier;
     private ContextMenuStrip? _contextMenu;
+    private SystemThemeChangeCoordinator? _systemThemeChangeCoordinator;
 
     private UsageSnapshot? _latestSnapshot;
     private TraySettings _currentSettings;
@@ -143,6 +144,8 @@ public class TrayIconManager : IDisposable
 
         _refreshTimer.Start();
         _ = RefreshAsync();
+
+        InitializeSystemThemeListener();
     }
 
     private void InitializeOverlay()
@@ -157,6 +160,19 @@ public class TrayIconManager : IDisposable
         _overlayLifecycle = new OverlayLifecycleCoordinator(windowAdapter, dispatcher);
 
         _overlayLifecycle.Initialize(_currentSettings);
+    }
+
+    private void InitializeSystemThemeListener()
+    {
+        var source = new SystemEventsThemeChangeSource();
+        var dispatcher = new WpfDispatcher();
+        _systemThemeChangeCoordinator = new SystemThemeChangeCoordinator(
+            source,
+            dispatcher,
+            () => _currentSettings,
+            settings => _themeCoordinator?.Apply(settings)
+        );
+        _systemThemeChangeCoordinator.Start();
     }
 
     private sealed class OverlayWindowAdapter : IOverlayWindowAdapter
@@ -808,6 +824,8 @@ public class TrayIconManager : IDisposable
 
         _isShuttingDown = true;
 
+        _systemThemeChangeCoordinator?.PrepareForShutdown();
+
         _refreshTimer.Stop();
 
         _overlayLifecycle?.PrepareForShutdown();
@@ -834,6 +852,10 @@ public class TrayIconManager : IDisposable
         if (disposing)
         {
             _refreshTimer.Stop();
+
+            _systemThemeChangeCoordinator?.PrepareForShutdown();
+            _systemThemeChangeCoordinator?.Dispose();
+            _systemThemeChangeCoordinator = null;
 
             _overlayLifecycle?.PrepareForShutdown();
             _overlayLifecycle = null;
