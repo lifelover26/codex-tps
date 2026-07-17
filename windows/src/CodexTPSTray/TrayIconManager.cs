@@ -26,6 +26,8 @@ public class TrayIconManager : IDisposable
     private OverlayLifecycleCoordinator? _overlayLifecycle;
     private ThemeApplicationCoordinator? _themeCoordinator;
     private ThemeApplicationTarget? _themeTarget;
+    private readonly IWinFormsThemeApplier _winFormsThemeApplier;
+    private ContextMenuStrip? _contextMenu;
 
     private UsageSnapshot? _latestSnapshot;
     private TraySettings _currentSettings;
@@ -68,25 +70,57 @@ public class TrayIconManager : IDisposable
     private readonly Dictionary<OverlayThemePreference, ToolStripMenuItem> _overlayThemeMenuItems = new();
     private readonly ToolStripMenuItem _themeSubmenu = new();
 
-    public TrayIconManager() : this(
-        TraySettingsStore.CreateDefault(),
-        new SessionScanner(),
-        new ShellLauncher(),
-        new RunKeyStore(),
-        () => Environment.ProcessPath,
-        new WpfMonitorWorkAreaProvider()
-    )
+    internal static TrayIconManager CreateDefault()
     {
+        var settingsStore = TraySettingsStore.CreateDefault();
+        var settings = settingsStore.Load();
+
+        var systemThemeSource = new WindowsSystemThemeSource();
+        var themeResolver = new ThemeResolver(systemThemeSource);
+        var resolvedTheme = themeResolver.ResolveApplication(settings.ApplicationTheme);
+
+        var winFormsThemeApplier = new WindowsFormsThemeApplier();
+        winFormsThemeApplier.TryApply(resolvedTheme);
+
+        return new TrayIconManager(
+            settingsStore,
+            settings,
+            new SessionScanner(),
+            new ShellLauncher(),
+            new RunKeyStore(),
+            () => Environment.ProcessPath,
+            new WpfMonitorWorkAreaProvider(),
+            winFormsThemeApplier,
+            themeResolver
+        );
     }
 
     public TrayIconManager(TraySettingsStore settingsStore, SessionScanner sessionScanner, IShellLauncher shellLauncher, IRunKeyStore runKeyStore, Func<string?> executablePathProvider, IMonitorWorkAreaProvider workAreaProvider)
+        : this(
+            settingsStore,
+            settingsStore.Load(),
+            sessionScanner,
+            shellLauncher,
+            runKeyStore,
+            executablePathProvider,
+            workAreaProvider,
+            new WindowsFormsThemeApplier(),
+            new ThemeResolver(new WindowsSystemThemeSource())
+        )
     {
-        _settingsStore = settingsStore;
-        _currentSettings = settingsStore.Load();
-        _sessionScanner = sessionScanner;
+    }
+
+    internal TrayIconManager(TraySettingsStore settingsStore, TraySettings initialSettings, SessionScanner sessionScanner, IShellLauncher shellLauncher, IRunKeyStore runKeyStore, Func<string?> executablePathProvider, IMonitorWorkAreaProvider workAreaProvider, IWinFormsThemeApplier winFormsThemeApplier, ThemeResolver themeResolver)
+    {
+        _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
+        _currentSettings = initialSettings ?? throw new ArgumentNullException(nameof(initialSettings));
+        _sessionScanner = sessionScanner ?? throw new ArgumentNullException(nameof(sessionScanner));
+        _workAreaProvider = workAreaProvider ?? throw new ArgumentNullException(nameof(workAreaProvider));
+        _winFormsThemeApplier = winFormsThemeApplier ?? throw new ArgumentNullException(nameof(winFormsThemeApplier));
+        if (themeResolver == null) throw new ArgumentNullException(nameof(themeResolver));
+
         _sessionFolderLauncher = new SessionFolderLauncher(() => sessionScanner.SessionsRoot, shellLauncher);
         _startupManager = new StartupManager(runKeyStore, executablePathProvider);
-        _workAreaProvider = workAreaProvider;
 
         _notifyIcon = new NotifyIcon();
         _refreshTimer = new DispatcherTimer();
@@ -97,8 +131,6 @@ public class TrayIconManager : IDisposable
         _settingsSynchronizer = new MonitorPanelSettingsSynchronizer(_currentSettings);
 
         _themeTarget = new ThemeApplicationTarget(this);
-        var systemThemeSource = new WindowsSystemThemeSource();
-        var themeResolver = new ThemeResolver(systemThemeSource);
         _themeCoordinator = new ThemeApplicationCoordinator(themeResolver, _themeTarget);
     }
 
@@ -152,6 +184,13 @@ public class TrayIconManager : IDisposable
 
         public void ApplyApplicationTheme(EffectiveTheme theme)
         {
+            _manager._winFormsThemeApplier.TryApply(theme);
+
+            if (_manager._contextMenu != null)
+            {
+                _manager._contextMenu.Refresh();
+            }
+
             if (_manager._monitorPanel != null)
             {
                 _manager._monitorPanel.ApplyTheme(theme);
@@ -190,7 +229,7 @@ public class TrayIconManager : IDisposable
 
     private void InitializeContextMenu()
     {
-        var contextMenu = new ContextMenuStrip();
+        _contextMenu = new ContextMenuStrip();
 
         _metricsSubmenu.Text = Localization.MetricsMenu(_currentSettings.Language);
         _metricsSubmenu.DropDownItems.Add(_totalTpsMenuItem);
@@ -202,9 +241,9 @@ public class TrayIconManager : IDisposable
         _metricsSubmenu.DropDownItems.Add(_activeSessionsMenuItem);
         _metricsSubmenu.DropDownItems.Add(_cacheRatioMenuItem);
         _metricsSubmenu.DropDownItems.Add(_statusMenuItem);
-        contextMenu.Items.Add(_metricsSubmenu);
+        _contextMenu.Items.Add(_metricsSubmenu);
 
-        contextMenu.Items.Add(new ToolStripSeparator());
+        _contextMenu.Items.Add(new ToolStripSeparator());
 
         _metricWindowSubmenu.Text = Localization.MetricWindowMenu(_currentSettings.Language);
         foreach (MetricWindow window in Enum.GetValues<MetricWindow>())
@@ -214,7 +253,7 @@ public class TrayIconManager : IDisposable
             _windowMenuItems[window] = item;
             _metricWindowSubmenu.DropDownItems.Add(item);
         }
-        contextMenu.Items.Add(_metricWindowSubmenu);
+        _contextMenu.Items.Add(_metricWindowSubmenu);
 
         _refreshCadenceSubmenu.Text = Localization.RefreshCadenceMenu(_currentSettings.Language);
         foreach (RefreshCadence cadence in Enum.GetValues<RefreshCadence>())
@@ -224,19 +263,19 @@ public class TrayIconManager : IDisposable
             _cadenceMenuItems[cadence] = item;
             _refreshCadenceSubmenu.DropDownItems.Add(item);
         }
-        contextMenu.Items.Add(_refreshCadenceSubmenu);
+        _contextMenu.Items.Add(_refreshCadenceSubmenu);
 
-        contextMenu.Items.Add(new ToolStripSeparator());
+        _contextMenu.Items.Add(new ToolStripSeparator());
 
         _openSessionsFolderMenuItem.Text = Localization.OpenSessionsFolderMenu(_currentSettings.Language);
         _openSessionsFolderMenuItem.Click += OnOpenSessionsFolderClicked;
-        contextMenu.Items.Add(_openSessionsFolderMenuItem);
+        _contextMenu.Items.Add(_openSessionsFolderMenuItem);
 
         _launchAtLoginMenuItem.Text = Localization.LaunchAtLogin(_currentSettings.Language);
         _launchAtLoginMenuItem.Click += OnLaunchAtLoginClicked;
-        contextMenu.Items.Add(_launchAtLoginMenuItem);
+        _contextMenu.Items.Add(_launchAtLoginMenuItem);
 
-        contextMenu.Items.Add(new ToolStripSeparator());
+        _contextMenu.Items.Add(new ToolStripSeparator());
 
         _overlaySubmenu.Text = Localization.OverlayMenu(_currentSettings.Language);
         _showOverlayMenuItem.Text = Localization.ShowOverlayMenu(_currentSettings.Language);
@@ -263,9 +302,9 @@ public class TrayIconManager : IDisposable
         }
         _overlaySubmenu.DropDownItems.Add(_overlayThemeSubmenu);
 
-        contextMenu.Items.Add(_overlaySubmenu);
+        _contextMenu.Items.Add(_overlaySubmenu);
 
-        contextMenu.Items.Add(new ToolStripSeparator());
+        _contextMenu.Items.Add(new ToolStripSeparator());
 
         _themeSubmenu.Text = Localization.ThemeMenu(_currentSettings.Language);
         foreach (ApplicationThemePreference preference in Enum.GetValues<ApplicationThemePreference>())
@@ -275,7 +314,7 @@ public class TrayIconManager : IDisposable
             _applicationThemeMenuItems[preference] = item;
             _themeSubmenu.DropDownItems.Add(item);
         }
-        contextMenu.Items.Add(_themeSubmenu);
+        _contextMenu.Items.Add(_themeSubmenu);
 
         _languageSubmenu.Text = Localization.LanguageMenu(_currentSettings.Language);
 
@@ -287,19 +326,19 @@ public class TrayIconManager : IDisposable
         _chineseLanguageMenuItem.Click += (sender, e) => OnLanguageSelected(Language.Chinese);
         _languageSubmenu.DropDownItems.Add(_chineseLanguageMenuItem);
 
-        contextMenu.Items.Add(_languageSubmenu);
+        _contextMenu.Items.Add(_languageSubmenu);
 
-        contextMenu.Items.Add(new ToolStripSeparator());
+        _contextMenu.Items.Add(new ToolStripSeparator());
 
         _refreshMenuItem.Text = Localization.RefreshMenu(_currentSettings.Language);
         _refreshMenuItem.Click += OnRefreshClicked;
-        contextMenu.Items.Add(_refreshMenuItem);
+        _contextMenu.Items.Add(_refreshMenuItem);
 
         _exitMenuItem.Text = Localization.ExitMenu(_currentSettings.Language);
         _exitMenuItem.Click += OnExitClicked;
-        contextMenu.Items.Add(_exitMenuItem);
+        _contextMenu.Items.Add(_exitMenuItem);
 
-        _notifyIcon.ContextMenuStrip = contextMenu;
+        _notifyIcon.ContextMenuStrip = _contextMenu;
 
         UpdateMenuCheckmarks();
     }
@@ -806,6 +845,9 @@ public class TrayIconManager : IDisposable
             _monitorPanel = null;
 
             _notifyIcon.Visible = false;
+            _notifyIcon.ContextMenuStrip = null;
+            _contextMenu?.Dispose();
+            _contextMenu = null;
             _notifyIcon.Icon = null;
             _notifyIcon.Dispose();
             _trayIcon?.Dispose();

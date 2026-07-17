@@ -21,7 +21,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        _trayIconManager = new TrayIconManager();
+        _trayIconManager = TrayIconManager.CreateDefault();
         _trayIconManager.Start();
     }
 
