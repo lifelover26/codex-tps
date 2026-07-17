@@ -18,7 +18,7 @@ no installer or separately installed .NET runtime is required.
 
 ### Install and Run
 
-1. Download `Codex-TPS-Windows-x64-Portable-0.1.1.zip` and its `.sha256` file.
+1. Download `Codex-TPS-Windows-x64-Portable-0.2.0.zip` and its `.sha256` file.
 2. Verify the checksum before extracting the ZIP.
 3. Extract the ZIP to a stable writable directory, for example:
 
@@ -76,6 +76,14 @@ Use `Language` in the tray menu to switch between English and Simplified
 Chinese. The tray menu, detailed panel, overlay, status text, and warnings update
 immediately. The selection is saved across launches.
 
+### Themes
+
+The top-level `Theme` menu selects `System`, `Light`, or `Dark` for the detailed
+panel and tray menu. `Overlay > Theme` independently selects `Follow Application`,
+`System`, `Light`, or `Dark` for the overlay. Theme selections are saved. When
+`System` is selected, the appearance updates in real time when the Windows light
+or dark mode changes, without restarting the app.
+
 ### Launch at Login
 
 `Launch at Login` writes the current executable path to the current user's
@@ -126,7 +134,7 @@ Existing settings remain in `%LOCALAPPDATA%\CodexTPS`.
 Do not run or extract the package if verification fails.
 
 ```powershell
-$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.1.1.zip"
+$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.2.0.zip"
 $checksumPath = "$zipPath.sha256"
 
 $expectedHash = (Get-Content $checksumPath -Raw).Split('  ')[0].Trim()
@@ -165,14 +173,14 @@ dotnet format .\windows\CodexTPS.slnx --verify-no-changes
 Create the x64 Portable release:
 
 ```powershell
-.\windows\scripts\New-Release.ps1 -Version 0.1.1
+.\windows\scripts\New-Release.ps1 -Version 0.2.0
 ```
 
 The script creates:
 
 ```text
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.1.1.zip
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.1.1.zip.sha256
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.2.0.zip
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.2.0.zip.sha256
 ```
 
 The ZIP contains exactly:
@@ -196,7 +204,7 @@ Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 tok
 
 ### 安装与启动
 
-1. 下载 `Codex-TPS-Windows-x64-Portable-0.1.1.zip` 和对应的 `.sha256`。
+1. 下载 `Codex-TPS-Windows-x64-Portable-0.2.0.zip` 和对应的 `.sha256`。
 2. 校验 SHA-256 后再解压。
 3. 解压到稳定且可写的目录，例如 `%USERPROFILE%\Apps\CodexTPS`。
 4. 运行 `CodexTPSTray.exe`。
@@ -240,6 +248,13 @@ Codex 在一次模型请求完成时记录 token 用量。因此这里显示的�
 通过托盘菜单的 `语言` 子菜单切换 English 或简体中文。托盘菜单、详细
 面板、悬浮窗、状态和警告会立即更新，语言选择会保存到设置中。
 
+### 主题
+
+顶层“主题”菜单可为详细面板和托盘菜单选择“跟随系统”、“浅色”或“深色”。
+“悬浮窗 > 主题”可独立选择“跟随应用”、“跟随系统”、“浅色”或“深色”。主题
+选择会保存。选择“跟随系统”时，Windows 明暗模式变化后会实时更新，无需
+重启。
+
 ### 登录时启动
 
 `登录时启动` 会把当前 EXE 路径写入当前用户的 Windows Run 注册表项。
@@ -280,7 +295,7 @@ Codex 在一次模型请求完成时记录 token 用量。因此这里显示的�
 dotnet build .\windows\CodexTPS.slnx
 dotnet test .\windows\CodexTPS.slnx
 dotnet format .\windows\CodexTPS.slnx --verify-no-changes
-.\windows\scripts\New-Release.ps1 -Version 0.1.1
+.\windows\scripts\New-Release.ps1 -Version 0.2.0
 ```
 
 发布脚本会生成 Portable ZIP 和对应的 SHA-256 文件。

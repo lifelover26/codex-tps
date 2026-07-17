@@ -60,6 +60,8 @@ warning. Do not run the executable directly from inside the ZIP.
 - Total, input, cached-input, output, and reasoning token throughput
 - Requests per minute, active sessions, and cache ratio
 - English and Simplified Chinese interface
+- Light/dark appearance for panel, tray menus, and overlay
+- Application and overlay can independently follow Windows system theme
 - Configurable `5s`, `15s`, `30s`, or `60s` refresh cadence
 - Manual refresh, session-folder shortcut, and optional launch at login
 - Self-contained x64 Portable release
@@ -67,8 +69,8 @@ warning. Do not run the executable directly from inside the ZIP.
 ### Basic use
 
 - Left-click the tray icon to show or hide the detailed metrics panel.
-- Right-click it to change the language, metric window, refresh cadence, login
-  behavior, and desktop overlay settings.
+- Right-click it to change the language, theme, metric window, refresh cadence,
+  login behavior, and desktop overlay settings.
 - When the overlay is unlocked, drag it to move it. When locked, it becomes
   mouse click-through.
 
@@ -145,6 +147,8 @@ ZIP 压缩包内运行程序。
 - 显示总 TPS、输入、缓存输入、输出和推理输出
 - 显示请求/分钟、活动会话和缓存比例
 - 支持简体中文与英文即时切换
+- 面板、托盘菜单和悬浮窗支持浅色/深色外观
+- 应用与悬浮窗可独立跟随 Windows 系统主题
 - 自动刷新可选 `5 / 15 / 30 / 60 秒`
 - 支持手动刷新、打开会话目录和可选的开机启动
 - 自包含 Windows x64 Portable 发布包
@@ -152,7 +156,7 @@ ZIP 压缩包内运行程序。
 ### 基本操作
 
 - 左键单击托盘图标：显示或隐藏详细面板。
-- 右键单击托盘图标：设置语言、统计窗口、刷新频率、开机启动和悬浮窗。
+- 右键单击托盘图标：设置语言、主题、统计窗口、刷新频率、开机启动和悬浮窗。
 - 悬浮窗未锁定时可以拖动；锁定后不会拦截鼠标操作。
 
 Codex 会在一次模型请求完成时记录 token 用量，因此这里显示的是所选滚动
