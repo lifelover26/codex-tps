@@ -7,7 +7,9 @@ public record TraySettings(
     bool OverlayEnabled = false,
     bool OverlayLocked = false,
     double? OverlayLeft = null,
-    double? OverlayTop = null
+    double? OverlayTop = null,
+    ApplicationThemePreference ApplicationTheme = ApplicationThemePreference.System,
+    OverlayThemePreference OverlayTheme = OverlayThemePreference.FollowApplication
 )
 {
     public static TraySettings Default { get; } = new(
@@ -17,6 +19,8 @@ public record TraySettings(
         OverlayEnabled: false,
         OverlayLocked: false,
         OverlayLeft: null,
-        OverlayTop: null
+        OverlayTop: null,
+        ApplicationTheme: ApplicationThemePreference.System,
+        OverlayTheme: OverlayThemePreference.FollowApplication
     );
 }

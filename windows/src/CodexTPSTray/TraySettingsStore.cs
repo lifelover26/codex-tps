@@ -48,8 +48,20 @@ public class TraySettingsStore
             bool overlayLocked = ParseOverlayLocked(raw?.OverlayLocked);
             double? overlayLeft = ParseOverlayPosition(raw?.OverlayLeft);
             double? overlayTop = ParseOverlayPosition(raw?.OverlayTop);
+            ApplicationThemePreference appTheme = ParseApplicationTheme(raw?.ApplicationTheme);
+            OverlayThemePreference overlayTheme = ParseOverlayTheme(raw?.OverlayTheme);
 
-            return new TraySettings(window, cadence, language, overlayEnabled, overlayLocked, overlayLeft, overlayTop);
+            return new TraySettings(
+                SelectedWindow: window,
+                RefreshCadence: cadence,
+                Language: language,
+                OverlayEnabled: overlayEnabled,
+                OverlayLocked: overlayLocked,
+                OverlayLeft: overlayLeft,
+                OverlayTop: overlayTop,
+                ApplicationTheme: appTheme,
+                OverlayTheme: overlayTheme
+            );
         }
         catch
         {
@@ -183,6 +195,39 @@ public class TraySettingsStore
         return pos;
     }
 
+    private static ApplicationThemePreference ParseApplicationTheme(string? value)
+    {
+        if (value == null)
+        {
+            return TraySettings.Default.ApplicationTheme;
+        }
+
+        return value.ToLowerInvariant() switch
+        {
+            "system" => ApplicationThemePreference.System,
+            "light" => ApplicationThemePreference.Light,
+            "dark" => ApplicationThemePreference.Dark,
+            _ => TraySettings.Default.ApplicationTheme
+        };
+    }
+
+    private static OverlayThemePreference ParseOverlayTheme(string? value)
+    {
+        if (value == null)
+        {
+            return TraySettings.Default.OverlayTheme;
+        }
+
+        return value.ToLowerInvariant() switch
+        {
+            "followapplication" => OverlayThemePreference.FollowApplication,
+            "system" => OverlayThemePreference.System,
+            "light" => OverlayThemePreference.Light,
+            "dark" => OverlayThemePreference.Dark,
+            _ => TraySettings.Default.OverlayTheme
+        };
+    }
+
     private sealed class RawSettingsDto
     {
         public string? SelectedWindow { get; set; }
@@ -192,6 +237,8 @@ public class TraySettingsStore
         public bool? OverlayLocked { get; set; }
         public double? OverlayLeft { get; set; }
         public double? OverlayTop { get; set; }
+        public string? ApplicationTheme { get; set; }
+        public string? OverlayTheme { get; set; }
 
         public RawSettingsDto()
         {
@@ -206,6 +253,8 @@ public class TraySettingsStore
             OverlayLocked = settings.OverlayLocked;
             OverlayLeft = settings.OverlayLeft;
             OverlayTop = settings.OverlayTop;
+            ApplicationTheme = settings.ApplicationTheme.ToString();
+            OverlayTheme = settings.OverlayTheme.ToString();
         }
     }
 }
