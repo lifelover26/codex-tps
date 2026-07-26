@@ -7,4 +7,5 @@ public interface IMonitorWorkAreaProvider
 {
     Rect GetPrimaryWorkArea();
     IReadOnlyList<Rect> GetAllWorkAreas();
+    IReadOnlyList<MonitorInfo> GetAllMonitorInfos();
 }

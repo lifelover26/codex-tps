@@ -27,6 +27,23 @@ public class WpfMonitorWorkAreaProvider : IMonitorWorkAreaProvider
         return workAreas;
     }
 
+    public IReadOnlyList<MonitorInfo> GetAllMonitorInfos()
+    {
+        var infos = new List<MonitorInfo>();
+        Screen? primary = Screen.PrimaryScreen;
+        string? primaryDeviceName = primary?.DeviceName ?? string.Empty;
+
+        foreach (Screen screen in Screen.AllScreens)
+        {
+            infos.Add(new MonitorInfo(
+                DeviceName: screen.DeviceName ?? string.Empty,
+                WorkingArea: ScreenToRect(screen.WorkingArea),
+                IsPrimary: string.Equals(screen.DeviceName, primaryDeviceName, StringComparison.OrdinalIgnoreCase)
+            ));
+        }
+        return infos;
+    }
+
     private Rect ScreenToRect(System.Drawing.Rectangle screenRect)
     {
         return new Rect(

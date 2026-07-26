@@ -13,7 +13,8 @@
         Focusable="False"
         FontFamily="Microsoft YaHei UI"
         TextOptions.TextFormattingMode="Display">
-    <Border Background="{DynamicResource OverlayBackgroundBrush}"
+    <Border x:Name="RootBorder"
+            Background="{DynamicResource OverlayBackgroundBrush}"
             CornerRadius="8"
             Padding="8,8">
         <Grid>

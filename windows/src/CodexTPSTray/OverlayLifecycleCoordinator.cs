@@ -80,7 +80,7 @@ internal sealed class OverlayLifecycleCoordinator
 
         _windowAdapter.UpdateSettings(_latestSettings);
         _windowAdapter.Show();
-        _windowAdapter.ResetPosition(_latestSettings.OverlayLeft, _latestSettings.OverlayTop);
+        _windowAdapter.ResetPosition(_latestSettings);
     }
 
     private void ExecuteFirstShow()
@@ -95,7 +95,7 @@ internal interface IOverlayWindowAdapter
     void Show();
     void Hide();
     void UpdateSettings(TraySettings settings);
-    void ResetPosition(double? left, double? top);
+    void ResetPosition(TraySettings settings);
 }
 
 internal interface IDispatcher

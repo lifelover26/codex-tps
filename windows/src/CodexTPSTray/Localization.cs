@@ -341,11 +341,6 @@ public static class Localization
         return language == Language.Chinese ? "锁定悬浮窗" : "Lock Overlay";
     }
 
-    public static string ResetOverlayPositionMenu(Language language)
-    {
-        return language == Language.Chinese ? "重置悬浮窗位置" : "Reset Overlay Position";
-    }
-
     public static string ThemeMenu(Language language)
     {
         return language == Language.Chinese ? "主题" : "Theme";
@@ -376,6 +371,44 @@ public static class Localization
             OverlayThemePreference.Light => language == Language.Chinese ? "浅色" : "Light",
             OverlayThemePreference.Dark => language == Language.Chinese ? "深色" : "Dark",
             _ => language == Language.Chinese ? "跟随应用" : "Follow Application"
+        };
+    }
+
+    public static string PositionMenu(Language language)
+    {
+        return language == Language.Chinese ? "快速定位" : "Position";
+    }
+
+    public static string GetPositionPresetDisplayName(OverlayPositionPreset preset, Language language)
+    {
+        return preset switch
+        {
+            OverlayPositionPreset.TopLeft => language == Language.Chinese ? "左上角" : "Top Left",
+            OverlayPositionPreset.TopRight => language == Language.Chinese ? "右上角" : "Top Right",
+            OverlayPositionPreset.MiddleLeft => language == Language.Chinese ? "左侧居中" : "Middle Left",
+            OverlayPositionPreset.MiddleRight => language == Language.Chinese ? "右侧居中" : "Middle Right",
+            OverlayPositionPreset.BottomLeft => language == Language.Chinese ? "左下角" : "Bottom Left",
+            OverlayPositionPreset.BottomRight => language == Language.Chinese ? "右下角" : "Bottom Right",
+            _ => language == Language.Chinese ? "左上角" : "Top Left"
+        };
+    }
+
+    public static string BackgroundOpacityMenu(Language language)
+    {
+        return language == Language.Chinese ? "背景不透明度" : "Background Opacity";
+    }
+
+    public static string GetOverlayOpacityDisplayName(OverlayOpacityPreference preference, Language language)
+    {
+        return preference switch
+        {
+            OverlayOpacityPreference.Default => language == Language.Chinese ? "默认" : "Default",
+            OverlayOpacityPreference.Percent40 => "40%",
+            OverlayOpacityPreference.Percent55 => "55%",
+            OverlayOpacityPreference.Percent70 => "70%",
+            OverlayOpacityPreference.Percent85 => "85%",
+            OverlayOpacityPreference.Opaque => "100%",
+            _ => language == Language.Chinese ? "默认" : "Default"
         };
     }
 }

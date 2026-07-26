@@ -50,6 +50,107 @@ public class TraySettingsStore
             double? overlayTop = ParseOverlayPosition(raw?.OverlayTop);
             ApplicationThemePreference appTheme = ParseApplicationTheme(raw?.ApplicationTheme);
             OverlayThemePreference overlayTheme = ParseOverlayTheme(raw?.OverlayTheme);
+            OverlayOpacityPreference overlayOpacity = ParseOverlayOpacity(raw?.OverlayOpacity);
+            OverlayPositionPreset? overlayPosition = ParseOverlayPositionPreset(raw?.OverlayPosition);
+            string? overlayMonitorDeviceName = raw?.OverlayMonitorDeviceName;
+
+            bool positionKeyPresent = raw?.OverlayPosition != null;
+            bool invalidPositionInJson = positionKeyPresent && !overlayPosition.HasValue;
+            bool hasLegacyCoords = overlayLeft.HasValue && overlayTop.HasValue;
+
+            // Invalid preset string: always fall back to TopRight, regardless of residual coords.
+            if (invalidPositionInJson)
+            {
+                return new TraySettings(
+                    SelectedWindow: window,
+                    RefreshCadence: cadence,
+                    Language: language,
+                    OverlayEnabled: overlayEnabled,
+                    OverlayLocked: overlayLocked,
+                    OverlayLeft: null,
+                    OverlayTop: null,
+                    ApplicationTheme: appTheme,
+                    OverlayTheme: overlayTheme,
+                    OverlayOpacity: overlayOpacity,
+                    OverlayPosition: OverlayPositionPreset.TopRight,
+                    OverlayMonitorDeviceName: null
+                );
+            }
+
+            // No position key and no device name: legacy migration.
+            if (!positionKeyPresent && string.IsNullOrEmpty(overlayMonitorDeviceName))
+            {
+                if (hasLegacyCoords)
+                {
+                    return new TraySettings(
+                        SelectedWindow: window,
+                        RefreshCadence: cadence,
+                        Language: language,
+                        OverlayEnabled: overlayEnabled,
+                        OverlayLocked: overlayLocked,
+                        OverlayLeft: overlayLeft,
+                        OverlayTop: overlayTop,
+                        ApplicationTheme: appTheme,
+                        OverlayTheme: overlayTheme,
+                        OverlayOpacity: overlayOpacity,
+                        OverlayPosition: null,
+                        OverlayMonitorDeviceName: null
+                    );
+                }
+
+                return new TraySettings(
+                    SelectedWindow: window,
+                    RefreshCadence: cadence,
+                    Language: language,
+                    OverlayEnabled: overlayEnabled,
+                    OverlayLocked: overlayLocked,
+                    OverlayLeft: null,
+                    OverlayTop: null,
+                    ApplicationTheme: appTheme,
+                    OverlayTheme: overlayTheme,
+                    OverlayOpacity: overlayOpacity,
+                    OverlayPosition: OverlayPositionPreset.TopRight,
+                    OverlayMonitorDeviceName: null
+                );
+            }
+
+            // Valid preset: clear absolute coords.
+            if (overlayPosition.HasValue)
+            {
+                return new TraySettings(
+                    SelectedWindow: window,
+                    RefreshCadence: cadence,
+                    Language: language,
+                    OverlayEnabled: overlayEnabled,
+                    OverlayLocked: overlayLocked,
+                    OverlayLeft: null,
+                    OverlayTop: null,
+                    ApplicationTheme: appTheme,
+                    OverlayTheme: overlayTheme,
+                    OverlayOpacity: overlayOpacity,
+                    OverlayPosition: overlayPosition,
+                    OverlayMonitorDeviceName: overlayMonitorDeviceName
+                );
+            }
+
+            // No preset, but has legacy coords: Custom mode.
+            if (hasLegacyCoords)
+            {
+                return new TraySettings(
+                    SelectedWindow: window,
+                    RefreshCadence: cadence,
+                    Language: language,
+                    OverlayEnabled: overlayEnabled,
+                    OverlayLocked: overlayLocked,
+                    OverlayLeft: overlayLeft,
+                    OverlayTop: overlayTop,
+                    ApplicationTheme: appTheme,
+                    OverlayTheme: overlayTheme,
+                    OverlayOpacity: overlayOpacity,
+                    OverlayPosition: null,
+                    OverlayMonitorDeviceName: null
+                );
+            }
 
             return new TraySettings(
                 SelectedWindow: window,
@@ -57,10 +158,13 @@ public class TraySettingsStore
                 Language: language,
                 OverlayEnabled: overlayEnabled,
                 OverlayLocked: overlayLocked,
-                OverlayLeft: overlayLeft,
-                OverlayTop: overlayTop,
+                OverlayLeft: null,
+                OverlayTop: null,
                 ApplicationTheme: appTheme,
-                OverlayTheme: overlayTheme
+                OverlayTheme: overlayTheme,
+                OverlayOpacity: overlayOpacity,
+                OverlayPosition: OverlayPositionPreset.TopRight,
+                OverlayMonitorDeviceName: null
             );
         }
         catch
@@ -183,13 +287,13 @@ public class TraySettingsStore
     {
         if (value == null)
         {
-            return TraySettings.Default.OverlayLeft;
+            return null;
         }
 
         double pos = value.Value;
         if (double.IsNaN(pos) || double.IsInfinity(pos))
         {
-            return TraySettings.Default.OverlayLeft;
+            return null;
         }
 
         return pos;
@@ -228,6 +332,36 @@ public class TraySettingsStore
         };
     }
 
+    private static OverlayOpacityPreference ParseOverlayOpacity(string? value)
+    {
+        if (value == null)
+        {
+            return TraySettings.Default.OverlayOpacity;
+        }
+
+        if (Enum.TryParse<OverlayOpacityPreference>(value, ignoreCase: true, out var preference) && Enum.IsDefined(preference))
+        {
+            return preference;
+        }
+
+        return TraySettings.Default.OverlayOpacity;
+    }
+
+    private static OverlayPositionPreset? ParseOverlayPositionPreset(string? value)
+    {
+        if (value == null)
+        {
+            return null;
+        }
+
+        if (Enum.TryParse<OverlayPositionPreset>(value, ignoreCase: true, out var preset) && Enum.IsDefined(preset))
+        {
+            return preset;
+        }
+
+        return null;
+    }
+
     private sealed class RawSettingsDto
     {
         public string? SelectedWindow { get; set; }
@@ -239,6 +373,9 @@ public class TraySettingsStore
         public double? OverlayTop { get; set; }
         public string? ApplicationTheme { get; set; }
         public string? OverlayTheme { get; set; }
+        public string? OverlayOpacity { get; set; }
+        public string? OverlayPosition { get; set; }
+        public string? OverlayMonitorDeviceName { get; set; }
 
         public RawSettingsDto()
         {
@@ -246,15 +383,21 @@ public class TraySettingsStore
 
         public RawSettingsDto(TraySettings settings)
         {
+            bool isPresetMode = settings.OverlayPosition.HasValue;
+
             SelectedWindow = settings.SelectedWindow.ToString();
             RefreshCadence = (int)settings.RefreshCadence;
             Language = settings.Language.ToString();
             OverlayEnabled = settings.OverlayEnabled;
             OverlayLocked = settings.OverlayLocked;
-            OverlayLeft = settings.OverlayLeft;
-            OverlayTop = settings.OverlayTop;
+            OverlayLeft = isPresetMode ? null : settings.OverlayLeft;
+            OverlayTop = isPresetMode ? null : settings.OverlayTop;
             ApplicationTheme = settings.ApplicationTheme.ToString();
             OverlayTheme = settings.OverlayTheme.ToString();
+            OverlayOpacity = settings.OverlayOpacity.ToString();
+            OverlayPosition = settings.OverlayPosition?.ToString();
+            // Custom mode must not persist a residual monitor device name.
+            OverlayMonitorDeviceName = isPresetMode ? settings.OverlayMonitorDeviceName : null;
         }
     }
 }

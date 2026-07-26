@@ -26,8 +26,7 @@ public class OverlayLifecycleCoordinatorTests
         public int HideCallCount { get; private set; }
         public int ResetPositionCallCount { get; private set; }
         public int UpdateSettingsCallCount { get; private set; }
-        public double? LastResetLeft { get; private set; }
-        public double? LastResetTop { get; private set; }
+        public TraySettings? LastResetSettings { get; private set; }
         public TraySettings? LastUpdatedSettings { get; private set; }
         public List<string> CallOrder { get; } = new();
 
@@ -52,11 +51,10 @@ public class OverlayLifecycleCoordinatorTests
             CallOrder.Add("UpdateSettings");
         }
 
-        public void ResetPosition(double? left, double? top)
+        public void ResetPosition(TraySettings settings)
         {
             ResetPositionCallCount++;
-            LastResetLeft = left;
-            LastResetTop = top;
+            LastResetSettings = settings;
             CallOrder.Add("ResetPosition");
         }
     }
@@ -92,15 +90,15 @@ public class OverlayLifecycleCoordinatorTests
     public void ExecuteQueuedFirstShow_Enabled_ShowsAndResetsPosition()
     {
         var coordinator = new OverlayLifecycleCoordinator(_windowAdapter, _dispatcher);
-        var settings = _enabledSettings with { OverlayLeft = 100.0, OverlayTop = 200.0 };
+        var settings = _enabledSettings with { OverlayLeft = 100.0, OverlayTop = 200.0, OverlayPosition = null };
 
         coordinator.Initialize(settings);
         _dispatcher.ExecuteQueued();
 
         Assert.Equal(1, _windowAdapter.ShowCallCount);
         Assert.Equal(1, _windowAdapter.ResetPositionCallCount);
-        Assert.Equal(100.0, _windowAdapter.LastResetLeft);
-        Assert.Equal(200.0, _windowAdapter.LastResetTop);
+        Assert.Equal(100.0, _windowAdapter.LastResetSettings?.OverlayLeft);
+        Assert.Equal(200.0, _windowAdapter.LastResetSettings?.OverlayTop);
     }
 
     [Fact]
@@ -132,14 +130,14 @@ public class OverlayLifecycleCoordinatorTests
     {
         _windowAdapter.IsVisible = false;
         var coordinator = new OverlayLifecycleCoordinator(_windowAdapter, _dispatcher);
-        var settings = _enabledSettings with { OverlayLeft = 50.0, OverlayTop = 75.0 };
+        var settings = _enabledSettings with { OverlayLeft = 50.0, OverlayTop = 75.0, OverlayPosition = null };
 
         coordinator.EnsureVisible(settings);
 
         Assert.Equal(1, _windowAdapter.ShowCallCount);
         Assert.Equal(1, _windowAdapter.ResetPositionCallCount);
-        Assert.Equal(50.0, _windowAdapter.LastResetLeft);
-        Assert.Equal(75.0, _windowAdapter.LastResetTop);
+        Assert.Equal(50.0, _windowAdapter.LastResetSettings?.OverlayLeft);
+        Assert.Equal(75.0, _windowAdapter.LastResetSettings?.OverlayTop);
     }
 
     [Fact]
@@ -181,14 +179,14 @@ public class OverlayLifecycleCoordinatorTests
     public void SetEnabled_True_ImmediatelyShows()
     {
         var coordinator = new OverlayLifecycleCoordinator(_windowAdapter, _dispatcher);
-        var settings = _enabledSettings with { OverlayLeft = 300.0, OverlayTop = 400.0 };
+        var settings = _enabledSettings with { OverlayLeft = 300.0, OverlayTop = 400.0, OverlayPosition = null };
 
         coordinator.SetEnabled(settings);
 
         Assert.Equal(1, _windowAdapter.ShowCallCount);
         Assert.Equal(1, _windowAdapter.ResetPositionCallCount);
-        Assert.Equal(300.0, _windowAdapter.LastResetLeft);
-        Assert.Equal(400.0, _windowAdapter.LastResetTop);
+        Assert.Equal(300.0, _windowAdapter.LastResetSettings?.OverlayLeft);
+        Assert.Equal(400.0, _windowAdapter.LastResetSettings?.OverlayTop);
     }
 
     [Fact]
@@ -227,13 +225,13 @@ public class OverlayLifecycleCoordinatorTests
     public void ResetPosition_PassesSavedCoordinates()
     {
         var coordinator = new OverlayLifecycleCoordinator(_windowAdapter, _dispatcher);
-        var settings = _enabledSettings with { OverlayLeft = 123.0, OverlayTop = 456.0 };
+        var settings = _enabledSettings with { OverlayLeft = 123.0, OverlayTop = 456.0, OverlayPosition = null };
 
         coordinator.SetEnabled(settings);
 
         Assert.Equal(1, _windowAdapter.ResetPositionCallCount);
-        Assert.Equal(123.0, _windowAdapter.LastResetLeft);
-        Assert.Equal(456.0, _windowAdapter.LastResetTop);
+        Assert.Equal(123.0, _windowAdapter.LastResetSettings?.OverlayLeft);
+        Assert.Equal(456.0, _windowAdapter.LastResetSettings?.OverlayTop);
     }
 
     [Fact]
@@ -241,7 +239,7 @@ public class OverlayLifecycleCoordinatorTests
     {
         _windowAdapter.IsVisible = false;
         var coordinator = new OverlayLifecycleCoordinator(_windowAdapter, _dispatcher);
-        var settings = _enabledSettings with { OverlayLeft = 10.0, OverlayTop = 20.0 };
+        var settings = _enabledSettings with { OverlayLeft = 10.0, OverlayTop = 20.0, OverlayPosition = null };
 
         coordinator.Initialize(settings);
         coordinator.EnsureVisible(settings);
@@ -256,14 +254,14 @@ public class OverlayLifecycleCoordinatorTests
     {
         _windowAdapter.IsVisible = false;
         var coordinator = new OverlayLifecycleCoordinator(_windowAdapter, _dispatcher);
-        var initialSettings = _enabledSettings with { OverlayLeft = 1.0, OverlayTop = 2.0 };
-        var updatedSettings = _enabledSettings with { OverlayLeft = 100.0, OverlayTop = 200.0 };
+        var initialSettings = _enabledSettings with { OverlayLeft = 1.0, OverlayTop = 2.0, OverlayPosition = null };
+        var updatedSettings = _enabledSettings with { OverlayLeft = 100.0, OverlayTop = 200.0, OverlayPosition = null };
 
         coordinator.Initialize(initialSettings);
         coordinator.EnsureVisible(updatedSettings);
 
-        Assert.Equal(100.0, _windowAdapter.LastResetLeft);
-        Assert.Equal(200.0, _windowAdapter.LastResetTop);
+        Assert.Equal(100.0, _windowAdapter.LastResetSettings?.OverlayLeft);
+        Assert.Equal(200.0, _windowAdapter.LastResetSettings?.OverlayTop);
     }
 
     [Fact]
@@ -271,7 +269,7 @@ public class OverlayLifecycleCoordinatorTests
     {
         _windowAdapter.IsVisible = false;
         var coordinator = new OverlayLifecycleCoordinator(_windowAdapter, _dispatcher);
-        var settings = _enabledSettings with { OverlayLeft = 10.0, OverlayTop = 20.0 };
+        var settings = _enabledSettings with { OverlayLeft = 10.0, OverlayTop = 20.0, OverlayPosition = null };
 
         coordinator.Initialize(settings);
         _dispatcher.ExecuteQueued();
@@ -287,7 +285,7 @@ public class OverlayLifecycleCoordinatorTests
     {
         _windowAdapter.IsVisible = false;
         var coordinator = new OverlayLifecycleCoordinator(_windowAdapter, _dispatcher);
-        var settings = _enabledSettings with { OverlayLeft = 30.0, OverlayTop = 40.0 };
+        var settings = _enabledSettings with { OverlayLeft = 30.0, OverlayTop = 40.0, OverlayPosition = null };
 
         coordinator.SetEnabled(settings);
 
@@ -314,15 +312,15 @@ public class OverlayLifecycleCoordinatorTests
     {
         _windowAdapter.IsVisible = false;
         var coordinator = new OverlayLifecycleCoordinator(_windowAdapter, _dispatcher);
-        var initialSettings = _enabledSettings with { OverlayLeft = 1.0, OverlayTop = 2.0 };
-        var newSettings = _enabledSettings with { OverlayLeft = 99.0, OverlayTop = 88.0 };
+        var initialSettings = _enabledSettings with { OverlayLeft = 1.0, OverlayTop = 2.0, OverlayPosition = null };
+        var newSettings = _enabledSettings with { OverlayLeft = 99.0, OverlayTop = 88.0, OverlayPosition = null };
 
         coordinator.Initialize(initialSettings);
         coordinator.SetEnabled(newSettings);
         _dispatcher.ExecuteQueued();
 
-        Assert.Equal(99.0, _windowAdapter.LastResetLeft);
-        Assert.Equal(88.0, _windowAdapter.LastResetTop);
+        Assert.Equal(99.0, _windowAdapter.LastResetSettings?.OverlayLeft);
+        Assert.Equal(88.0, _windowAdapter.LastResetSettings?.OverlayTop);
     }
 
     [Fact]
@@ -336,5 +334,46 @@ public class OverlayLifecycleCoordinatorTests
         _dispatcher.ExecuteQueued();
 
         Assert.Equal(0, _windowAdapter.ShowCallCount);
+    }
+
+    [Fact]
+    public void ResetPosition_ReceivesFullTraySettings_IncludingPresetAndDeviceName()
+    {
+        var coordinator = new OverlayLifecycleCoordinator(_windowAdapter, _dispatcher);
+        var settings = _enabledSettings with
+        {
+            OverlayPosition = OverlayPositionPreset.BottomRight,
+            OverlayMonitorDeviceName = @"\\.\DISPLAY2",
+            OverlayLeft = null,
+            OverlayTop = null
+        };
+
+        coordinator.SetEnabled(settings);
+
+        Assert.Equal(1, _windowAdapter.ResetPositionCallCount);
+        Assert.NotNull(_windowAdapter.LastResetSettings);
+        Assert.Equal(OverlayPositionPreset.BottomRight, _windowAdapter.LastResetSettings!.OverlayPosition);
+        Assert.Equal(@"\\.\DISPLAY2", _windowAdapter.LastResetSettings.OverlayMonitorDeviceName);
+        Assert.Null(_windowAdapter.LastResetSettings.OverlayLeft);
+        Assert.Null(_windowAdapter.LastResetSettings.OverlayTop);
+    }
+
+    [Fact]
+    public void EnsureVisible_ReShow_PassesFullTraySettings_ToResetPosition()
+    {
+        _windowAdapter.IsVisible = false;
+        var coordinator = new OverlayLifecycleCoordinator(_windowAdapter, _dispatcher);
+        var settings = _enabledSettings with
+        {
+            OverlayPosition = OverlayPositionPreset.MiddleLeft,
+            OverlayMonitorDeviceName = @"\\.\DISPLAY3"
+        };
+
+        coordinator.EnsureVisible(settings);
+
+        Assert.Equal(1, _windowAdapter.ResetPositionCallCount);
+        Assert.NotNull(_windowAdapter.LastResetSettings);
+        Assert.Equal(OverlayPositionPreset.MiddleLeft, _windowAdapter.LastResetSettings!.OverlayPosition);
+        Assert.Equal(@"\\.\DISPLAY3", _windowAdapter.LastResetSettings.OverlayMonitorDeviceName);
     }
 }

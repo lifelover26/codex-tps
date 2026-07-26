@@ -135,4 +135,143 @@ public class LocalizationTests
     {
         Assert.Equal("跟随应用", Localization.GetOverlayThemeDisplayName((OverlayThemePreference)99, Language.Chinese));
     }
+
+    [Fact]
+    public void PositionMenu_English()
+    {
+        Assert.Equal("Position", Localization.PositionMenu(Language.English));
+    }
+
+    [Fact]
+    public void PositionMenu_Chinese()
+    {
+        Assert.Equal("快速定位", Localization.PositionMenu(Language.Chinese));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_TopLeft_English()
+    {
+        Assert.Equal("Top Left", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.TopLeft, Language.English));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_TopLeft_Chinese()
+    {
+        Assert.Equal("左上角", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.TopLeft, Language.Chinese));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_TopRight_English()
+    {
+        Assert.Equal("Top Right", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.TopRight, Language.English));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_TopRight_Chinese()
+    {
+        Assert.Equal("右上角", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.TopRight, Language.Chinese));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_MiddleLeft_English()
+    {
+        Assert.Equal("Middle Left", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.MiddleLeft, Language.English));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_MiddleLeft_Chinese()
+    {
+        Assert.Equal("左侧居中", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.MiddleLeft, Language.Chinese));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_MiddleRight_English()
+    {
+        Assert.Equal("Middle Right", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.MiddleRight, Language.English));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_MiddleRight_Chinese()
+    {
+        Assert.Equal("右侧居中", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.MiddleRight, Language.Chinese));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_BottomLeft_English()
+    {
+        Assert.Equal("Bottom Left", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.BottomLeft, Language.English));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_BottomLeft_Chinese()
+    {
+        Assert.Equal("左下角", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.BottomLeft, Language.Chinese));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_BottomRight_English()
+    {
+        Assert.Equal("Bottom Right", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.BottomRight, Language.English));
+    }
+
+    [Fact]
+    public void GetPositionPresetDisplayName_BottomRight_Chinese()
+    {
+        Assert.Equal("右下角", Localization.GetPositionPresetDisplayName(OverlayPositionPreset.BottomRight, Language.Chinese));
+    }
+
+    [Fact]
+    public void BackgroundOpacityMenu_English()
+    {
+        Assert.Equal("Background Opacity", Localization.BackgroundOpacityMenu(Language.English));
+    }
+
+    [Fact]
+    public void BackgroundOpacityMenu_Chinese()
+    {
+        Assert.Equal("背景不透明度", Localization.BackgroundOpacityMenu(Language.Chinese));
+    }
+
+    [Fact]
+    public void GetOverlayOpacityDisplayName_Default_English()
+    {
+        Assert.Equal("Default", Localization.GetOverlayOpacityDisplayName(OverlayOpacityPreference.Default, Language.English));
+    }
+
+    [Fact]
+    public void GetOverlayOpacityDisplayName_Default_Chinese()
+    {
+        Assert.Equal("默认", Localization.GetOverlayOpacityDisplayName(OverlayOpacityPreference.Default, Language.Chinese));
+    }
+
+    [Fact]
+    public void GetOverlayOpacityDisplayName_Percent40()
+    {
+        Assert.Equal("40%", Localization.GetOverlayOpacityDisplayName(OverlayOpacityPreference.Percent40, Language.English));
+        Assert.Equal("40%", Localization.GetOverlayOpacityDisplayName(OverlayOpacityPreference.Percent40, Language.Chinese));
+    }
+
+    [Fact]
+    public void GetOverlayOpacityDisplayName_Percent55()
+    {
+        Assert.Equal("55%", Localization.GetOverlayOpacityDisplayName(OverlayOpacityPreference.Percent55, Language.English));
+    }
+
+    [Fact]
+    public void GetOverlayOpacityDisplayName_Percent70()
+    {
+        Assert.Equal("70%", Localization.GetOverlayOpacityDisplayName(OverlayOpacityPreference.Percent70, Language.English));
+    }
+
+    [Fact]
+    public void GetOverlayOpacityDisplayName_Percent85()
+    {
+        Assert.Equal("85%", Localization.GetOverlayOpacityDisplayName(OverlayOpacityPreference.Percent85, Language.English));
+    }
+
+    [Fact]
+    public void GetOverlayOpacityDisplayName_Opaque()
+    {
+        Assert.Equal("100%", Localization.GetOverlayOpacityDisplayName(OverlayOpacityPreference.Opaque, Language.English));
+    }
 }

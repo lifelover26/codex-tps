@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.Json;
 using Xunit;
 
 namespace CodexTPSTray.Tests;
@@ -353,7 +354,8 @@ public class TraySettingsStoreTests : IDisposable
             OverlayEnabled: true,
             OverlayLocked: false,
             OverlayLeft: 500.0,
-            OverlayTop: 200.0
+            OverlayTop: 200.0,
+            OverlayPosition: null
         );
 
         bool result = store.TrySave(settings);
@@ -378,7 +380,8 @@ public class TraySettingsStoreTests : IDisposable
             OverlayEnabled: true,
             OverlayLocked: true,
             OverlayLeft: -1500.0,
-            OverlayTop: 500.5
+            OverlayTop: 500.5,
+            OverlayPosition: null
         );
 
         bool result = store.TrySave(settings);
@@ -605,7 +608,8 @@ public class TraySettingsStoreTests : IDisposable
             OverlayLeft: -1500.0,
             OverlayTop: 500.5,
             ApplicationTheme: ApplicationThemePreference.Dark,
-            OverlayTheme: OverlayThemePreference.Light
+            OverlayTheme: OverlayThemePreference.Light,
+            OverlayPosition: null
         );
 
         bool result = store.TrySave(settings);
@@ -645,5 +649,468 @@ public class TraySettingsStoreTests : IDisposable
         Assert.Contains("Light", json);
         Assert.DoesNotContain("ApplicationTheme\":2", json);
         Assert.DoesNotContain("OverlayTheme\":2", json);
+    }
+
+    [Fact]
+    public void Load_LegacyJsonWithoutOverlayOpacity_ReturnsDefault()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"FiveMinutes\",\"RefreshCadence\":30,\"Language\":\"English\",\"OverlayEnabled\":true}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayOpacityPreference.Default, settings.OverlayOpacity);
+    }
+
+    [Fact]
+    public void Load_MissingFile_ReturnsDefaultOverlayOpacity()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayOpacityPreference.Default, settings.OverlayOpacity);
+    }
+
+    [Fact]
+    public void TrySave_WithOverlayOpacity_SavesAndReloads()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(
+            MetricWindow.OneMinute,
+            RefreshCadence.FifteenSeconds,
+            OverlayOpacity: OverlayOpacityPreference.Percent40
+        );
+
+        bool result = store.TrySave(settings);
+        Assert.True(result);
+
+        var loaded = store.Load();
+        Assert.Equal(OverlayOpacityPreference.Percent40, loaded.OverlayOpacity);
+    }
+
+    [Fact]
+    public void Load_ValidOverlayOpacityPercent55_ReturnsPercent55()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayOpacity\":\"Percent55\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayOpacityPreference.Percent55, settings.OverlayOpacity);
+    }
+
+    [Fact]
+    public void Load_ValidOverlayOpacityPercent70_ReturnsPercent70()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayOpacity\":\"Percent70\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayOpacityPreference.Percent70, settings.OverlayOpacity);
+    }
+
+    [Fact]
+    public void Load_ValidOverlayOpacityPercent85_ReturnsPercent85()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayOpacity\":\"Percent85\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayOpacityPreference.Percent85, settings.OverlayOpacity);
+    }
+
+    [Fact]
+    public void Load_ValidOverlayOpacityOpaque_ReturnsOpaque()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayOpacity\":\"Opaque\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayOpacityPreference.Opaque, settings.OverlayOpacity);
+    }
+
+    [Fact]
+    public void Load_InvalidOverlayOpacity_FallsBackToDefault()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayOpacity\":\"Invalid\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayOpacityPreference.Default, settings.OverlayOpacity);
+    }
+
+    [Fact]
+    public void Load_NullOverlayOpacity_FallsBackToDefault()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayOpacity\":null}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayOpacityPreference.Default, settings.OverlayOpacity);
+    }
+
+    [Fact]
+    public void Load_OverlayOpacityCaseInsensitive_ReturnsCorrectValue()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayOpacity\":\"pErCeNt40\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayOpacityPreference.Percent40, settings.OverlayOpacity);
+    }
+
+    [Fact]
+    public void Load_NewOpacityFieldDoesNotAffectExistingFields()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"FiveMinutes\",\"RefreshCadence\":30,\"Language\":\"Chinese\",\"OverlayEnabled\":true,\"OverlayOpacity\":\"Percent40\",\"ApplicationTheme\":\"Dark\",\"OverlayTheme\":\"Light\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(MetricWindow.FiveMinutes, settings.SelectedWindow);
+        Assert.Equal(RefreshCadence.ThirtySeconds, settings.RefreshCadence);
+        Assert.Equal(Language.Chinese, settings.Language);
+        Assert.True(settings.OverlayEnabled);
+        Assert.Equal(ApplicationThemePreference.Dark, settings.ApplicationTheme);
+        Assert.Equal(OverlayThemePreference.Light, settings.OverlayTheme);
+        Assert.Equal(OverlayOpacityPreference.Percent40, settings.OverlayOpacity);
+    }
+
+    [Fact]
+    public void TrySave_OverlayOpacityUsesNameStrings()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(
+            MetricWindow.OneMinute,
+            RefreshCadence.FifteenSeconds,
+            OverlayOpacity: OverlayOpacityPreference.Percent55
+        );
+
+        bool result = store.TrySave(settings);
+        Assert.True(result);
+
+        string json = File.ReadAllText(_settingsPath);
+        Assert.Contains("OverlayOpacity", json);
+        Assert.Contains("Percent55", json);
+        Assert.DoesNotContain("OverlayOpacity\":1", json);
+    }
+
+    [Fact]
+    public void TrySave_AllOverlayOpacityValues_Roundtrip()
+    {
+        foreach (OverlayOpacityPreference preference in Enum.GetValues<OverlayOpacityPreference>())
+        {
+            string testPath = Path.Combine(_tempDirectory, $"opacity_{preference}.json");
+            var store = TraySettingsStore.CreateForTests(testPath);
+            var settings = new TraySettings(
+                MetricWindow.OneMinute,
+                RefreshCadence.FifteenSeconds,
+                OverlayOpacity: preference
+            );
+
+            bool result = store.TrySave(settings);
+            Assert.True(result);
+
+            var loaded = store.Load();
+            Assert.Equal(preference, loaded.OverlayOpacity);
+        }
+    }
+
+    [Fact]
+    public void Load_MissingFile_ReturnsTopRightPositionPreset()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayPositionPreset.TopRight, settings.OverlayPosition);
+        Assert.Null(settings.OverlayMonitorDeviceName);
+        Assert.Null(settings.OverlayLeft);
+        Assert.Null(settings.OverlayTop);
+    }
+
+    [Fact]
+    public void Load_LegacyJsonWithCoords_MigratesToCustom()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayLeft\":500.0,\"OverlayTop\":300.0}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Null(settings.OverlayPosition);
+        Assert.Null(settings.OverlayMonitorDeviceName);
+        Assert.Equal(500.0, settings.OverlayLeft);
+        Assert.Equal(300.0, settings.OverlayTop);
+    }
+
+    [Fact]
+    public void Load_LegacyJsonWithoutCoords_MigratesToTopRight()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayPositionPreset.TopRight, settings.OverlayPosition);
+        Assert.Null(settings.OverlayMonitorDeviceName);
+        Assert.Null(settings.OverlayLeft);
+        Assert.Null(settings.OverlayTop);
+    }
+
+    [Fact]
+    public void Load_LegacyJsonWithSingleCoord_SafeFallbackToTopRight()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayLeft\":500.0}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayPositionPreset.TopRight, settings.OverlayPosition);
+        Assert.Null(settings.OverlayLeft);
+        Assert.Null(settings.OverlayTop);
+    }
+
+    [Fact]
+    public void TrySave_WithPositionPreset_SavesAndReloads()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(
+            MetricWindow.OneMinute,
+            RefreshCadence.FifteenSeconds,
+            OverlayPosition: OverlayPositionPreset.BottomLeft,
+            OverlayMonitorDeviceName: @"\\.\DISPLAY2"
+        );
+
+        bool result = store.TrySave(settings);
+        Assert.True(result);
+
+        var loaded = store.Load();
+        Assert.Equal(OverlayPositionPreset.BottomLeft, loaded.OverlayPosition);
+        Assert.Equal(@"\\.\DISPLAY2", loaded.OverlayMonitorDeviceName);
+        Assert.Null(loaded.OverlayLeft);
+        Assert.Null(loaded.OverlayTop);
+    }
+
+    [Fact]
+    public void TrySave_PresetClearsAbsoluteCoords()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(
+            MetricWindow.OneMinute,
+            RefreshCadence.FifteenSeconds,
+            OverlayLeft: 999.0,
+            OverlayTop: 888.0,
+            OverlayPosition: OverlayPositionPreset.TopRight,
+            OverlayMonitorDeviceName: null
+        );
+
+        bool result = store.TrySave(settings);
+        Assert.True(result);
+
+        string json = File.ReadAllText(_settingsPath);
+        using var document = JsonDocument.Parse(json);
+        bool hasLeft = document.RootElement.TryGetProperty("OverlayLeft", out var leftElement);
+        bool hasTop = document.RootElement.TryGetProperty("OverlayTop", out var topElement);
+        Assert.True(hasLeft);
+        Assert.True(hasTop);
+        Assert.Equal(JsonValueKind.Null, leftElement.ValueKind);
+        Assert.Equal(JsonValueKind.Null, topElement.ValueKind);
+
+        var loaded = store.Load();
+        Assert.Null(loaded.OverlayLeft);
+        Assert.Null(loaded.OverlayTop);
+    }
+
+    [Fact]
+    public void TrySave_CustomPreservesAbsoluteCoords()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(
+            MetricWindow.OneMinute,
+            RefreshCadence.FifteenSeconds,
+            OverlayLeft: 400.0,
+            OverlayTop: 500.0,
+            OverlayPosition: null,
+            OverlayMonitorDeviceName: null
+        );
+
+        bool result = store.TrySave(settings);
+        Assert.True(result);
+
+        var loaded = store.Load();
+        Assert.Null(loaded.OverlayPosition);
+        Assert.Equal(400.0, loaded.OverlayLeft);
+        Assert.Equal(500.0, loaded.OverlayTop);
+    }
+
+    [Fact]
+    public void Load_ValidOverlayPositionPreset_ReturnsPreset()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayPosition\":\"MiddleLeft\",\"OverlayMonitorDeviceName\":\"\\\\\\\\.\\\\DISPLAY1\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayPositionPreset.MiddleLeft, settings.OverlayPosition);
+        Assert.Equal(@"\\.\DISPLAY1", settings.OverlayMonitorDeviceName);
+        Assert.Null(settings.OverlayLeft);
+        Assert.Null(settings.OverlayTop);
+    }
+
+    [Fact]
+    public void Load_InvalidOverlayPositionPreset_SafeFallbackToTopRight()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayPosition\":\"Invalid\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayPositionPreset.TopRight, settings.OverlayPosition);
+        Assert.Null(settings.OverlayLeft);
+        Assert.Null(settings.OverlayTop);
+    }
+
+    [Fact]
+    public void Load_PositionPresetCaseInsensitive_ReturnsCorrectValue()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayPosition\":\"bOtToMrIgHt\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayPositionPreset.BottomRight, settings.OverlayPosition);
+    }
+
+    [Fact]
+    public void TrySave_AllPresetValues_Roundtrip()
+    {
+        foreach (OverlayPositionPreset preset in Enum.GetValues<OverlayPositionPreset>())
+        {
+            string testPath = Path.Combine(_tempDirectory, $"position_{preset}.json");
+            var store = TraySettingsStore.CreateForTests(testPath);
+            var settings = new TraySettings(
+                MetricWindow.OneMinute,
+                RefreshCadence.FifteenSeconds,
+                OverlayPosition: preset,
+                OverlayMonitorDeviceName: "test-device"
+            );
+
+            bool result = store.TrySave(settings);
+            Assert.True(result);
+
+            var loaded = store.Load();
+            Assert.Equal(preset, loaded.OverlayPosition);
+            Assert.Equal("test-device", loaded.OverlayMonitorDeviceName);
+        }
+    }
+
+    [Fact]
+    public void Load_PositionPresetUsesNameStrings()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayPosition\":\"TopLeft\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayPositionPreset.TopLeft, settings.OverlayPosition);
+    }
+
+    [Fact]
+    public void TrySave_PositionPresetUsesNameStrings()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(
+            MetricWindow.OneMinute,
+            RefreshCadence.FifteenSeconds,
+            OverlayPosition: OverlayPositionPreset.MiddleRight
+        );
+
+        bool result = store.TrySave(settings);
+        Assert.True(result);
+
+        string json = File.ReadAllText(_settingsPath);
+        Assert.Contains("OverlayPosition", json);
+        Assert.Contains("MiddleRight", json);
+        Assert.DoesNotContain("OverlayPosition\":3", json);
+    }
+
+    [Fact]
+    public void DefaultConstructor_OverlayPosition_IsTopRight()
+    {
+        var settings = new TraySettings(MetricWindow.OneMinute, RefreshCadence.FifteenSeconds);
+
+        Assert.Equal(OverlayPositionPreset.TopRight, settings.OverlayPosition);
+        Assert.Null(settings.OverlayMonitorDeviceName);
+        Assert.Null(settings.OverlayLeft);
+        Assert.Null(settings.OverlayTop);
+    }
+
+    [Fact]
+    public void Load_InvalidPresetWithValidCoords_FallsBackToTopRight()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayPosition\":\"Invalid\",\"OverlayLeft\":500.0,\"OverlayTop\":300.0}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayPositionPreset.TopRight, settings.OverlayPosition);
+        Assert.Null(settings.OverlayLeft);
+        Assert.Null(settings.OverlayTop);
+        Assert.Null(settings.OverlayMonitorDeviceName);
+    }
+
+    [Fact]
+    public void TrySave_CustomMode_ClearsResidualMonitorDeviceName()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(
+            MetricWindow.OneMinute,
+            RefreshCadence.FifteenSeconds,
+            OverlayLeft: 400.0,
+            OverlayTop: 500.0,
+            OverlayPosition: null,
+            OverlayMonitorDeviceName: @"\\.\DISPLAY2"
+        );
+
+        bool result = store.TrySave(settings);
+        Assert.True(result);
+
+        string json = File.ReadAllText(_settingsPath);
+        using var document = JsonDocument.Parse(json);
+        bool hasDeviceName = document.RootElement.TryGetProperty("OverlayMonitorDeviceName", out var deviceElement);
+        Assert.True(hasDeviceName);
+        Assert.Equal(JsonValueKind.Null, deviceElement.ValueKind);
+
+        var loaded = store.Load();
+        Assert.Null(loaded.OverlayPosition);
+        Assert.Null(loaded.OverlayMonitorDeviceName);
+        Assert.Equal(400.0, loaded.OverlayLeft);
+        Assert.Equal(500.0, loaded.OverlayTop);
+    }
+
+    [Fact]
+    public void TrySave_PresetMode_PreservesMonitorDeviceName()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = new TraySettings(
+            MetricWindow.OneMinute,
+            RefreshCadence.FifteenSeconds,
+            OverlayPosition: OverlayPositionPreset.BottomLeft,
+            OverlayMonitorDeviceName: @"\\.\DISPLAY2"
+        );
+
+        bool result = store.TrySave(settings);
+        Assert.True(result);
+
+        var loaded = store.Load();
+        Assert.Equal(OverlayPositionPreset.BottomLeft, loaded.OverlayPosition);
+        Assert.Equal(@"\\.\DISPLAY2", loaded.OverlayMonitorDeviceName);
+        Assert.Null(loaded.OverlayLeft);
+        Assert.Null(loaded.OverlayTop);
     }
 }

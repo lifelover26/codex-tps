@@ -9,7 +9,10 @@ public record TraySettings(
     double? OverlayLeft = null,
     double? OverlayTop = null,
     ApplicationThemePreference ApplicationTheme = ApplicationThemePreference.System,
-    OverlayThemePreference OverlayTheme = OverlayThemePreference.FollowApplication
+    OverlayThemePreference OverlayTheme = OverlayThemePreference.FollowApplication,
+    OverlayOpacityPreference OverlayOpacity = OverlayOpacityPreference.Default,
+    OverlayPositionPreset? OverlayPosition = OverlayPositionPreset.TopRight,
+    string? OverlayMonitorDeviceName = null
 )
 {
     public static TraySettings Default { get; } = new(
@@ -21,6 +24,9 @@ public record TraySettings(
         OverlayLeft: null,
         OverlayTop: null,
         ApplicationTheme: ApplicationThemePreference.System,
-        OverlayTheme: OverlayThemePreference.FollowApplication
+        OverlayTheme: OverlayThemePreference.FollowApplication,
+        OverlayOpacity: OverlayOpacityPreference.Default,
+        OverlayPosition: OverlayPositionPreset.TopRight,
+        OverlayMonitorDeviceName: null
     );
 }

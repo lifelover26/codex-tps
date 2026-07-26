@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace CodexTPSTray;
 
@@ -13,6 +14,8 @@ public partial class OverlayWindow : Window
     private bool _isLocked;
     private bool _isShuttingDown;
     private bool _shutdownPrepared;
+    private EffectiveTheme _currentTheme = EffectiveTheme.Light;
+    private OverlayOpacityPreference _currentOpacity = OverlayOpacityPreference.Default;
 
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -53,6 +56,7 @@ public partial class OverlayWindow : Window
         _workAreaProvider = workAreaProvider;
 
         OverlayThemeResources.Apply(Resources, EffectiveTheme.Dark);
+        _currentTheme = EffectiveTheme.Dark;
 
         Loaded += OnLoaded;
         Closing += OnClosing;
@@ -61,7 +65,49 @@ public partial class OverlayWindow : Window
 
     internal void ApplyTheme(EffectiveTheme theme)
     {
+        _currentTheme = theme;
         OverlayThemeResources.Apply(Resources, theme);
+        ApplyOpacityToBorder();
+    }
+
+    public void ApplyOpacity(OverlayOpacityPreference preference)
+    {
+        _currentOpacity = preference;
+        ApplyOpacityToBorder();
+    }
+
+    private void ApplyOpacityToBorder()
+    {
+        if (_currentOpacity == OverlayOpacityPreference.Default)
+        {
+            RootBorder.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "OverlayBackgroundBrush");
+        }
+        else
+        {
+            System.Windows.Media.Color color = OverlayOpacityCalculator.CreateBackgroundColor(_currentOpacity, _currentTheme);
+            RootBorder.Background = new SolidColorBrush(color);
+        }
+    }
+
+    public (double Left, double Top, double Width, double Height)? GetCurrentRect()
+    {
+        var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
+        if (hwndSource == null)
+            return null;
+
+        if (!GetWindowRect(hwndSource.Handle, out RECT rect))
+            return null;
+
+        return (rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+    }
+
+    public void MoveToPosition(double left, double top)
+    {
+        var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
+        if (hwndSource == null)
+            return;
+
+        SetWindowPos(hwndSource.Handle, IntPtr.Zero, (int)left, (int)top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -150,9 +196,12 @@ public partial class OverlayWindow : Window
         {
             ApplyExtendedStyles();
         }
+
+        _currentOpacity = settings.OverlayOpacity;
+        ApplyOpacityToBorder();
     }
 
-    public void ResetPosition(double? savedLeft = null, double? savedTop = null)
+    public void ResetPosition(TraySettings settings)
     {
         var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
         if (hwndSource == null)
@@ -169,21 +218,59 @@ public partial class OverlayWindow : Window
         if (width <= 0 || height <= 0)
             return;
 
+        var (left, top) = ResolvePosition(settings, width, height);
+        SetWindowPos(hwnd, IntPtr.Zero, (int)left, (int)top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    public (double Left, double Top) ResolvePosition(TraySettings settings, double width, double height)
+    {
         System.Windows.Size overlaySize = new System.Windows.Size(width, height);
-        Rect primaryWorkArea = _workAreaProvider.GetPrimaryWorkArea();
-        var allWorkAreas = _workAreaProvider.GetAllWorkAreas();
         Thickness margin = new Thickness(16);
 
-        var (left, top) = OverlayPositionCalculator.CalculatePosition(
-            savedLeft,
-            savedTop,
+        if (settings.OverlayPosition.HasValue)
+        {
+            var allMonitorInfos = _workAreaProvider.GetAllMonitorInfos();
+            var primaryWorkArea = _workAreaProvider.GetPrimaryWorkArea();
+
+            MonitorInfo primaryMonitorInfo = new MonitorInfo(
+                DeviceName: string.Empty,
+                WorkingArea: primaryWorkArea,
+                IsPrimary: true
+            );
+
+            foreach (var info in allMonitorInfos)
+            {
+                if (info.IsPrimary)
+                {
+                    primaryMonitorInfo = info;
+                    break;
+                }
+            }
+
+            MonitorInfo targetMonitor = OverlayPositionCalculator.ResolveTargetMonitor(
+                settings.OverlayMonitorDeviceName,
+                allMonitorInfos,
+                primaryMonitorInfo);
+
+            return OverlayPositionCalculator.CalculatePresetPosition(
+                settings.OverlayPosition.Value,
+                overlaySize,
+                targetMonitor.WorkingArea,
+                margin
+            );
+        }
+
+        var primaryWorkArea2 = _workAreaProvider.GetPrimaryWorkArea();
+        var allWorkAreas = _workAreaProvider.GetAllWorkAreas();
+
+        return OverlayPositionCalculator.CalculatePosition(
+            settings.OverlayLeft,
+            settings.OverlayTop,
             overlaySize,
-            primaryWorkArea,
+            primaryWorkArea2,
             allWorkAreas,
             margin
         );
-
-        SetWindowPos(hwnd, IntPtr.Zero, (int)left, (int)top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     public void PrepareForShutdown()
