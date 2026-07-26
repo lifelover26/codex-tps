@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 
 namespace CodexTPSCore;
 
@@ -10,12 +11,18 @@ public class SessionScanner
 {
     private static readonly byte[] TimestampPrefix = "{\"timestamp\":\""u8.ToArray();
 
+    private const int ContinuityWindowSize = 4_096;
+
     private class FileCursor
     {
         public long Offset { get; set; } = 0;
         public byte[] Remainder { get; set; } = Array.Empty<byte>();
         public TokenParserState ParserState { get; } = new();
         public DateTimeOffset LastModified { get; set; } = DateTimeOffset.MinValue;
+        // In-memory only: SHA-256 of the last up to ContinuityWindowSize bytes before
+        // Offset. Never persisted, logged, or rendered. Used solely to detect mid-file
+        // rewrites that the Offset/Length guard cannot catch.
+        public byte[]? ContinuityDigest { get; set; }
     }
 
     private record SessionFile(
@@ -74,7 +81,24 @@ public class SessionScanner
 
                 foreach (var file in files)
                 {
-                    ReadAppendedContent(file, retentionStart);
+                    if (ReadAppendedContent(file, retentionStart))
+                    {
+                        // Continuity broken: clear all scan-derived state and rebuild
+                        // once from a fresh discovery pass. Old events and dedup keys
+                        // are discarded because they may have been derived from the
+                        // replaced file. At most one rebuild per Refresh.
+                        _cursors.Clear();
+                        _events.Clear();
+                        _seenDeduplicationKeys.Clear();
+                        _malformedRelevantLines = 0;
+
+                        files = DiscoverSessionFiles(now);
+                        foreach (var rebuildFile in files)
+                        {
+                            ReadAppendedContent(rebuildFile, retentionStart);
+                        }
+                        break;
+                    }
                 }
 
                 // Clean up old events:
@@ -143,23 +167,16 @@ public class SessionScanner
                     .ToList();
     }
 
-    private void ReadAppendedContent(SessionFile file, DateTimeOffset retentionStart)
+    // Returns true when the cursor's content continuity is broken and the caller
+    // must rebuild all scan-derived state once. Returns false after a normal read
+    // (including the no-new-content case). The same FileStream is used for both
+    // continuity verification and incremental reading to narrow the race window
+    // between checking and opening the file.
+    private bool ReadAppendedContent(SessionFile file, DateTimeOffset retentionStart)
     {
         if (!_cursors.TryGetValue(file.Path, out var cursor))
         {
             cursor = new FileCursor();
-        }
-
-        if (file.Size < cursor.Offset)
-        {
-            cursor = new FileCursor();
-        }
-
-        if (file.Size <= cursor.Offset)
-        {
-            cursor.LastModified = file.ModifiedAt;
-            _cursors[file.Path] = cursor;
-            return;
         }
 
         byte[] appendedBuffer = new byte[_readChunkSize];
@@ -168,6 +185,31 @@ public class SessionScanner
 
         using (var stream = new FileStream(file.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
         {
+            long actualLength = stream.Length;
+
+            // Verify content continuity before reusing a non-zero cursor. This
+            // catches same-length rewrites and truncate-then-regrow scenarios
+            // that the Offset/Length guard alone cannot detect.
+            if (cursor.Offset > 0)
+            {
+                if (actualLength < cursor.Offset || cursor.ContinuityDigest == null)
+                {
+                    return true;
+                }
+
+                if (!VerifyBoundaryDigest(stream, cursor.Offset, cursor.ContinuityDigest))
+                {
+                    return true;
+                }
+            }
+
+            if (actualLength <= cursor.Offset)
+            {
+                cursor.LastModified = file.ModifiedAt;
+                _cursors[file.Path] = cursor;
+                return false;
+            }
+
             stream.Seek(cursor.Offset, SeekOrigin.Begin);
 
             while (true)
@@ -203,11 +245,75 @@ public class SessionScanner
                     }
                 }
             }
+
+            // Advance to the actual read endpoint, not the discovery-time file.Size
+            // snapshot, so concurrent appends are not re-read on the next refresh.
+            long endOffset = stream.Position;
+            cursor.Offset = endOffset;
+            cursor.ContinuityDigest = ComputeBoundaryDigest(stream, endOffset);
+            cursor.LastModified = file.ModifiedAt;
+            _cursors[file.Path] = cursor;
+            return false;
+        }
+    }
+
+    // Computes the SHA-256 of the last up to ContinuityWindowSize bytes ending at
+    // endOffset. In-memory only: never persisted or logged. After this call the
+    // stream position is at endOffset, but callers must not reassign cursor.Offset
+    // from stream.Position here.
+    private static byte[] ComputeBoundaryDigest(Stream stream, long endOffset)
+    {
+        long anchorLen = Math.Min(ContinuityWindowSize, endOffset);
+        if (anchorLen <= 0)
+        {
+            return Array.Empty<byte>();
         }
 
-        cursor.Offset = file.Size;
-        cursor.LastModified = file.ModifiedAt;
-        _cursors[file.Path] = cursor;
+        long start = endOffset - anchorLen;
+        stream.Seek(start, SeekOrigin.Begin);
+
+        byte[] buffer = new byte[anchorLen];
+        int totalRead = 0;
+        while (totalRead < buffer.Length)
+        {
+            int read = stream.Read(buffer, totalRead, buffer.Length - totalRead);
+            if (read <= 0)
+            {
+                break;
+            }
+            totalRead += read;
+        }
+
+        if (totalRead == 0)
+        {
+            return Array.Empty<byte>();
+        }
+
+        if (totalRead < buffer.Length)
+        {
+            byte[] trimmed = new byte[totalRead];
+            Buffer.BlockCopy(buffer, 0, trimmed, 0, totalRead);
+            buffer = trimmed;
+        }
+
+        return SHA256.HashData(buffer);
+    }
+
+    private static bool VerifyBoundaryDigest(Stream stream, long endOffset, byte[] expected)
+    {
+        byte[] actual = ComputeBoundaryDigest(stream, endOffset);
+        if (actual.Length != expected.Length)
+        {
+            return false;
+        }
+        for (int i = 0; i < actual.Length; i++)
+        {
+            if (actual[i] != expected[i])
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     private (List<byte[]> lines, byte[] remainder) SplitRelevantCompleteLines(byte[] data, string minimumTimestamp)
