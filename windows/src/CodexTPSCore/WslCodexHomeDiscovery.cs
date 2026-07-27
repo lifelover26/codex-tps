@@ -124,6 +124,56 @@ public sealed class WslCodexHomeDiscovery
         return results;
     }
 
+    // Resolves a single, already-chosen WSL distribution without first running
+    // `wsl.exe --list --quiet` and without probing any other distribution.
+    //
+    // Used by the data-source resolver (phase 2) to turn a persisted user
+    // selection directly into a concrete CodexHome for the current run. This
+    // is the "resolve one" path; DiscoverAsync above is the "list all" path.
+    //
+    // Reuses the same private ResolveDistributionAsync as the list loop, so the
+    // safe wsl.exe command, the per-distribution timeout, the UNC conversion,
+    // and the sessions-directory check are identical and not duplicated.
+    //
+    // Failure policy matches DiscoverAsync: any failure (invalid name, wsl.exe
+    // missing, non-zero exit, timeout, cancellation, illegal path output, or
+    // missing sessions/ directory) returns null. Nothing is thrown to the UI.
+    // The returned UNC path is re-resolved on every call; nothing is cached or
+    // persisted here.
+    public async Task<ResolvedCodexDataSource?> ResolveSingleDistributionAsync(
+        string distributionName,
+        CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        // Validate before creating the linked CTS so a pre-checked invalid name
+        // never spawns a process. ResolveDistributionAsync also validates, but
+        // keeping this guard means the timeout/CTS machinery is skipped for the
+        // obviously-invalid case.
+        if (!WslDistributionNameValidator.IsValid(distributionName))
+        {
+            return null;
+        }
+
+        using var perDistCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        perDistCts.CancelAfter(_perDistributionTimeout);
+        try
+        {
+            return await ResolveDistributionAsync(distributionName, perDistCts.Token)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            // Timeout, cancellation, wsl.exe missing, or any other runtime
+            // failure: the distribution is unavailable this run. Return null
+            // so the caller can fall back without surfacing an exception.
+            return null;
+        }
+    }
+
     private async Task<IReadOnlyList<string>> ListDistributionsAsync(CancellationToken cancellationToken)
     {
         var result = await _processRunner.RunAsync(

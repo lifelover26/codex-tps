@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using CodexTPSCore;
 
 namespace CodexTPSTray;
 
@@ -54,6 +55,14 @@ public class TraySettingsStore
             OverlayPositionPreset? overlayPosition = ParseOverlayPositionPreset(raw?.OverlayPosition);
             string? overlayMonitorDeviceName = raw?.OverlayMonitorDeviceName;
 
+            // Parse DataSource independently of the other fields. Any invalid
+            // combination (unknown Kind, malformed name, Windows carrying a
+            // name, WSL missing a name) falls back to Windows WITHOUT touching
+            // the rest of the settings, satisfying the per-field fallback
+            // contract. Parsed here once so every return branch below threads
+            // the same value through the full constructor and cannot drop it.
+            CodexDataSourceSelection dataSource = ParseDataSource(raw?.DataSource);
+
             bool positionKeyPresent = raw?.OverlayPosition != null;
             bool invalidPositionInJson = positionKeyPresent && !overlayPosition.HasValue;
             bool hasLegacyCoords = overlayLeft.HasValue && overlayTop.HasValue;
@@ -73,7 +82,8 @@ public class TraySettingsStore
                     OverlayTheme: overlayTheme,
                     OverlayOpacity: overlayOpacity,
                     OverlayPosition: OverlayPositionPreset.TopRight,
-                    OverlayMonitorDeviceName: null
+                    OverlayMonitorDeviceName: null,
+                    DataSource: dataSource
                 );
             }
 
@@ -94,7 +104,8 @@ public class TraySettingsStore
                         OverlayTheme: overlayTheme,
                         OverlayOpacity: overlayOpacity,
                         OverlayPosition: null,
-                        OverlayMonitorDeviceName: null
+                        OverlayMonitorDeviceName: null,
+                        DataSource: dataSource
                     );
                 }
 
@@ -110,7 +121,8 @@ public class TraySettingsStore
                     OverlayTheme: overlayTheme,
                     OverlayOpacity: overlayOpacity,
                     OverlayPosition: OverlayPositionPreset.TopRight,
-                    OverlayMonitorDeviceName: null
+                    OverlayMonitorDeviceName: null,
+                    DataSource: dataSource
                 );
             }
 
@@ -129,7 +141,8 @@ public class TraySettingsStore
                     OverlayTheme: overlayTheme,
                     OverlayOpacity: overlayOpacity,
                     OverlayPosition: overlayPosition,
-                    OverlayMonitorDeviceName: overlayMonitorDeviceName
+                    OverlayMonitorDeviceName: overlayMonitorDeviceName,
+                    DataSource: dataSource
                 );
             }
 
@@ -148,7 +161,8 @@ public class TraySettingsStore
                     OverlayTheme: overlayTheme,
                     OverlayOpacity: overlayOpacity,
                     OverlayPosition: null,
-                    OverlayMonitorDeviceName: null
+                    OverlayMonitorDeviceName: null,
+                    DataSource: dataSource
                 );
             }
 
@@ -164,7 +178,8 @@ public class TraySettingsStore
                 OverlayTheme: overlayTheme,
                 OverlayOpacity: overlayOpacity,
                 OverlayPosition: OverlayPositionPreset.TopRight,
-                OverlayMonitorDeviceName: null
+                OverlayMonitorDeviceName: null,
+                DataSource: dataSource
             );
         }
         catch
@@ -362,6 +377,95 @@ public class TraySettingsStore
         return null;
     }
 
+    // Parses the persisted DataSource object into a CodexDataSourceSelection.
+    // Reads from a JsonElement? (not a typed DTO) so that a tampered or
+    // corrupted DataSource field — e.g. Kind supplied as a number, or the
+    // whole field set to a string — can never crash the surrounding
+    // RawSettingsDto deserialization. Every invalid shape degrades to Windows
+    // without touching the other settings that were already parsed.
+    //
+    // On-disk contract: { "Kind": "Windows"|"Wsl", "WslDistributionName": string|null }.
+    // Kind is matched case-insensitively. The distribution name is normalized
+    // and validated by CodexDataSourceSelection.ForWsl; an invalid name falls
+    // back to Windows. Windows must not carry a name; WSL must carry a valid
+    // one. Anything else is Windows.
+    private static CodexDataSourceSelection ParseDataSource(JsonElement? element)
+    {
+        if (!element.HasValue || element.Value.ValueKind == JsonValueKind.Null)
+        {
+            // Legacy files written before DataSource existed migrate to Windows.
+            return CodexDataSourceSelection.Windows;
+        }
+
+        var ds = element.Value;
+        if (ds.ValueKind != JsonValueKind.Object)
+        {
+            return CodexDataSourceSelection.Windows;
+        }
+
+        string? kind = null;
+        if (ds.TryGetProperty("Kind", out var kindElement) && kindElement.ValueKind == JsonValueKind.String)
+        {
+            kind = kindElement.GetString();
+        }
+
+        string? distroName = null;
+        if (ds.TryGetProperty("WslDistributionName", out var nameElement) && nameElement.ValueKind == JsonValueKind.String)
+        {
+            distroName = nameElement.GetString();
+        }
+
+        if (string.IsNullOrWhiteSpace(kind))
+        {
+            return CodexDataSourceSelection.Windows;
+        }
+
+        if (string.Equals(kind, "Windows", StringComparison.OrdinalIgnoreCase))
+        {
+            // Windows must not carry a distribution name. If one is present
+            // (corrupted/tampered file) it is ignored: the selection falls back
+            // to a clean Windows selection with a null name.
+            return CodexDataSourceSelection.Windows;
+        }
+
+        if (string.Equals(kind, "Wsl", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(distroName))
+            {
+                return CodexDataSourceSelection.Windows;
+            }
+
+            try
+            {
+                // ForWsl trims and validates; throws ArgumentException on an
+                // illegal name (slashes, control chars, traversal, etc.).
+                return CodexDataSourceSelection.ForWsl(distroName);
+            }
+            catch (ArgumentException)
+            {
+                return CodexDataSourceSelection.Windows;
+            }
+        }
+
+        // Unknown Kind value.
+        return CodexDataSourceSelection.Windows;
+    }
+
+    // Builds the on-disk DataSource element from a selection. The shape is
+    // exactly { "Kind": <string>, "WslDistributionName": <string|null> }.
+    // Only Kind and the normalized distribution name are emitted; CodexHome,
+    // sessions paths, Linux user directories, and UNC paths are never written.
+    private static JsonElement BuildDataSourceElement(CodexDataSourceSelection selection)
+    {
+        var json = JsonSerializer.Serialize(new
+        {
+            Kind = selection.Kind.ToString(),
+            WslDistributionName = selection.WslDistributionName
+        });
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.Clone();
+    }
+
     private sealed class RawSettingsDto
     {
         public string? SelectedWindow { get; set; }
@@ -376,6 +480,11 @@ public class TraySettingsStore
         public string? OverlayOpacity { get; set; }
         public string? OverlayPosition { get; set; }
         public string? OverlayMonitorDeviceName { get; set; }
+
+        // Stored as a raw JsonElement so a malformed DataSource field can never
+        // destabilize deserialization of the rest of the DTO. ParseDataSource
+        // inspects the element defensively (see Load).
+        public JsonElement? DataSource { get; set; }
 
         public RawSettingsDto()
         {
@@ -398,6 +507,9 @@ public class TraySettingsStore
             OverlayPosition = settings.OverlayPosition?.ToString();
             // Custom mode must not persist a residual monitor device name.
             OverlayMonitorDeviceName = isPresetMode ? settings.OverlayMonitorDeviceName : null;
+            // Only Kind and the normalized WslDistributionName are persisted.
+            // No CodexHome, sessions path, or UNC path is ever written.
+            DataSource = BuildDataSourceElement(settings.DataSource);
         }
     }
 }
