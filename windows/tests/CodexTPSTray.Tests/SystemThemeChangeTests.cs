@@ -22,7 +22,7 @@ public class SystemEventsThemeChangeSourceTests
         source.Subscribe(() => callbackCount++);
 
         Assert.NotNull(addedHandler);
-        addedHandler!.Invoke(null, new UserPreferenceChangedEventArgs(UserPreferenceCategory.General));
+        addedHandler!.Invoke(source, new UserPreferenceChangedEventArgs(UserPreferenceCategory.General));
         Assert.Equal(1, callbackCount);
     }
 

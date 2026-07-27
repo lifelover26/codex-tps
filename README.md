@@ -57,6 +57,8 @@ warning. Do not run the executable directly from inside the ZIP.
 - Native Windows 11 notification-area application
 - Detailed panel with rolling `1m`, `5m`, `30m`, and `1h` metrics
 - Optional compact desktop overlay that can be dragged or locked click-through
+- Overlay background opacity levels and position presets snapped to the current monitor's work area
+- Single data-source selection: Windows Codex home or one discovered and accessible WSL distribution (sessions are not merged)
 - Total, input, cached-input, output, and reasoning token throughput
 - Requests per minute, active sessions, and cache ratio
 - English and Simplified Chinese interface
@@ -83,6 +85,13 @@ per-streaming-token speedometer.
 - Windows 11 x64
 - Codex logs under `%USERPROFILE%\.codex\sessions`, or
   `%CODEX_HOME%\sessions` when `CODEX_HOME` is set
+- WSL data sources are available only when the WSL distribution is discoverable
+  and its sessions directory is accessible from Windows (for example via
+  `\\wsl.localhost\Distro\...`)
+
+Use the `Data Source` submenu to select the Windows Codex home (default) or one
+discovered WSL distribution. Exactly one source is active at a time; sessions
+from different sources are not merged together.
 
 Per-user settings are stored at:
 
@@ -144,6 +153,8 @@ ZIP 压缩包内运行程序。
 - 原生 Windows 11 通知区域应用
 - 详细统计面板，支持 `1 分钟 / 5 分钟 / 30 分钟 / 1 小时` 时间窗口
 - 可选桌面悬浮窗；未锁定时可拖动，锁定后鼠标可穿透
+- 悬浮窗背景透明度档位与位置预设，预设位置按当前显示器工作区计算
+- 数据源单选：Windows Codex Home 或一个已探测并校验可访问的 WSL 发行版（不合并会话）
 - 显示总 TPS、输入、缓存输入、输出和推理输出
 - 显示请求/分钟、活动会话和缓存比例
 - 支持简体中文与英文即时切换
@@ -167,6 +178,11 @@ Codex 会在一次模型请求完成时记录 token 用量，因此这里显示�
 - Windows 11 x64
 - Codex 日志位于 `%USERPROFILE%\.codex\sessions`；设置了 `CODEX_HOME`
   时则读取 `%CODEX_HOME%\sessions`
+- 仅当 WSL 发行版可被探测且其 sessions 目录可从 Windows 访问时（例如通过
+  `\\wsl.localhost\发行版名\...`），才会出现在数据源菜单中
+
+通过托盘菜单的“数据源”子菜单选择 Windows Codex Home（默认）或一个已探测到
+的 WSL 发行版。同一时间只有一个数据源处于活动状态，不会合并不同来源的会话。
 
 用户设置保存在：
 

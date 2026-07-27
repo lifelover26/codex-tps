@@ -4,6 +4,14 @@ A privacy-first Windows 11 tray monitor for local Codex token throughput.
 The release is a self-contained Portable ZIP: extract it and run the executable;
 no installer or separately installed .NET runtime is required.
 
+**What's new in v0.3.0:**
+
+- Overlay background opacity levels and position presets snapped to the current
+  monitor's work area (custom drag positions remain absolute coordinates).
+- Data source selection: choose the Windows Codex home or one discovered,
+  accessible WSL distribution. Sessions from different sources are not merged.
+- Hardened session-scanning cursor continuity.
+
 [English](#english) | [简体中文](#简体中文)
 
 ## English
@@ -13,12 +21,14 @@ no installer or separately installed .NET runtime is required.
 - Windows 11 x64
 - Codex session logs under `%USERPROFILE%\.codex\sessions`, or
   `%CODEX_HOME%\sessions` when `CODEX_HOME` is set
+- WSL distributions are only available as data sources when discoverable and
+  their sessions directory is accessible from Windows
 - No API key is required by Codex TPS
 - No separately installed .NET runtime is required for the release build
 
 ### Install and Run
 
-1. Download `Codex-TPS-Windows-x64-Portable-0.2.0.zip` and its `.sha256` file.
+1. Download `Codex-TPS-Windows-x64-Portable-0.3.0.zip` and its `.sha256` file.
 2. Verify the checksum before extracting the ZIP.
 3. Extract the ZIP to a stable writable directory, for example:
 
@@ -58,17 +68,41 @@ The optional desktop overlay is disabled by default. Open the tray menu and use:
 
 - `Overlay > Show Overlay` to show or hide it
 - `Overlay > Lock Overlay` to lock or unlock it
-- `Overlay > Reset Overlay Position` to return it to the primary monitor's
-  top-right area
+- `Overlay > Opacity` to select a background opacity level
+- `Overlay > Position` to choose a preset position (Top Left, Top Right,
+  Middle Left, Middle Right, Bottom Left, Bottom Right) on the current
+  monitor's work area
 
-When unlocked, drag anywhere on the overlay to move it. Its position is saved.
-When locked, the overlay becomes mouse click-through, so it does not block the
-window underneath. Unlock it from the tray menu. The overlay is always on top,
-does not appear in the taskbar or Alt+Tab, and is included in normal screenshots
-and recordings.
+When unlocked, drag anywhere on the overlay to move it. A manually dragged
+position is saved as custom absolute screen coordinates; selecting any preset
+recalculates the position against the current monitor's work area, so presets
+adapt when monitor layout changes. When locked, the overlay becomes mouse
+click-through, so it does not block the window underneath. Unlock it from the
+tray menu. The overlay is always on top, does not appear in the taskbar or
+Alt+Tab, and is included in normal screenshots and recordings.
 
 The overlay uses the same snapshot and refresh cadence as the detailed panel. It
 does not start another scanner or increase the configured polling frequency.
+
+### Data Source
+
+The `Data Source` submenu selects where Codex TPS reads session logs from.
+Exactly one source is active at a time:
+
+- **Windows (default)** reads from `%USERPROFILE%\.codex\sessions`, or
+  `%CODEX_HOME%\sessions` when the `CODEX_HOME` environment variable is set.
+- **WSL distributions** listed in the submenu are discovered automatically. A
+  distribution appears only when WSL is installed and its Codex sessions
+  directory is accessible from Windows (for example via
+  `\\wsl.localhost\<DistroName>\home\<user>\.codex\sessions`). If a listed distribution
+  is no longer accessible, switching to it shows a warning and the active
+  source does not change.
+
+Sessions from different sources are never merged together. Switching sources
+stops reading from the previous source immediately; the next refresh uses the
+newly selected source. The selected source is saved across launches. Discovery
+of WSL distributions runs once when the submenu opens; open the submenu again
+to refresh the list after WSL distributions are started or stopped.
 
 ### Language
 
@@ -134,7 +168,7 @@ Existing settings remain in `%LOCALAPPDATA%\CodexTPS`.
 Do not run or extract the package if verification fails.
 
 ```powershell
-$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.2.0.zip"
+$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.3.0.zip"
 $checksumPath = "$zipPath.sha256"
 
 $expectedHash = (Get-Content $checksumPath -Raw).Split('  ')[0].Trim()
@@ -152,6 +186,11 @@ Write-Host "Checksum verified successfully"
 - If the icon is not visible, check the notification-area overflow menu.
 - If the app reports no sessions, confirm that Codex has created the sessions
   directory or that `CODEX_HOME` points to the intended Codex home.
+- If a WSL distribution does not appear in the Data Source menu, confirm that
+  WSL is installed, the distribution is running, and its Codex sessions
+  directory is accessible from Windows (`\\wsl.localhost\<DistroName>\...`).
+- If switching to a WSL distribution shows a failure warning, confirm that the
+  distribution is still accessible; the previous data source remains active.
 - If a locked overlay needs to move, unlock it from the tray menu first.
 - If an old login entry stops working after moving the app, run the app from its
   new location, disable `Launch at Login`, and enable it again.
@@ -173,14 +212,14 @@ dotnet format .\windows\CodexTPS.slnx --verify-no-changes
 Create the x64 Portable release:
 
 ```powershell
-.\windows\scripts\New-Release.ps1 -Version 0.2.0
+.\windows\scripts\New-Release.ps1 -Version 0.3.0
 ```
 
 The script creates:
 
 ```text
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.2.0.zip
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.2.0.zip.sha256
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.0.zip
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.0.zip.sha256
 ```
 
 The ZIP contains exactly:
@@ -195,16 +234,26 @@ Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 tok
 吞吐率的 Windows 11 托盘工具。发布包为自包含 Portable ZIP：解压后即可
 运行，不需要安装程序，也不需要单独安装 .NET 运行时。
 
+**v0.3.0 新增内容：**
+
+- 悬浮窗背景透明度档位与位置预设，预设位置按当前显示器工作区计算（自
+  定义拖动位置仍保存绝对坐标）。
+- 数据源选择：可选择 Windows Codex Home 或一个已探测并可访问的 WSL
+  发行版；不同来源的会话不会合并。
+- 会话扫描 cursor 连续性加固。
+
 ### 系统要求
 
 - Windows 11 x64
 - Codex 会话日志位于 `%USERPROFILE%\.codex\sessions`；设置了
   `CODEX_HOME` 时则读取 `%CODEX_HOME%\sessions`
+- WSL 发行版仅在可被探测且其 sessions 目录可从 Windows 访问时才会作为
+  数据源选项出现
 - Codex TPS 本身不需要 API Key
 
 ### 安装与启动
 
-1. 下载 `Codex-TPS-Windows-x64-Portable-0.2.0.zip` 和对应的 `.sha256`。
+1. 下载 `Codex-TPS-Windows-x64-Portable-0.3.0.zip` 和对应的 `.sha256`。
 2. 校验 SHA-256 后再解压。
 3. 解压到稳定且可写的目录，例如 `%USERPROFILE%\Apps\CodexTPS`。
 4. 运行 `CodexTPSTray.exe`。
@@ -234,14 +283,35 @@ Codex 在一次模型请求完成时记录 token 用量。因此这里显示的�
 
 - `悬浮窗 > 显示悬浮窗`：显示或隐藏
 - `悬浮窗 > 锁定悬浮窗`：锁定或解锁
-- `悬浮窗 > 重置悬浮窗位置`：恢复到主显示器右上区域
+- `悬浮窗 > 透明度`：选择背景透明度档位
+- `悬浮窗 > 位置`：选择预设位置（左上角、右上角、左侧居中、右侧居中、
+  左下角、右下角），按当前显示器工作区计算
 
-未锁定时，可按住悬浮窗任意位置拖动，位置会自动保存。锁定后悬浮窗会
-变为鼠标穿透，不会阻挡下面窗口的操作；需要移动时从托盘菜单解除锁定。
-悬浮窗保持置顶，不出现在任务栏和 Alt+Tab 中，普通截图和录屏会包含它。
+未锁定时，可按住悬浮窗任意位置拖动。手动拖动的位置以自定义绝对屏幕坐标
+保存；选择任一预设位置会按当前显示器工作区重新计算，显示器布局变化后会
+自动适配。锁定后悬浮窗会变为鼠标穿透，不会阻挡下面窗口的操作；需要移动
+时从托盘菜单解除锁定。悬浮窗保持置顶，不出现在任务栏和 Alt+Tab 中，普通
+截图和录屏会包含它。
 
 悬浮窗与详细面板共用同一份数据快照和刷新频率，不会启动第二个扫描器，
 也不会提高当前设置的轮询频率。
+
+### 数据源
+
+通过托盘菜单的“数据源”子菜单选择 Codex TPS 读取会话日志的位置。同一时间
+只有一个数据源处于活动状态：
+
+- **Windows（默认）**：从 `%USERPROFILE%\.codex\sessions` 读取；设置了
+  `CODEX_HOME` 环境变量时从 `%CODEX_HOME%\sessions` 读取。
+- **WSL 发行版**：子菜单中列出的 WSL 发行版会自动探测。仅当已安装 WSL 且
+  该发行版的 Codex sessions 目录可从 Windows 访问（例如通过
+  `\\wsl.localhost\<发行版名>\home\<用户名>\.codex\sessions`）时，该发行版才会
+  出现在列表中。若已列出的发行版变得不可访问，切换时会显示警告，当前
+  活动数据源不会改变。
+
+不同来源的会话不会合并。切换数据源后立即停止从旧源读取，下一次刷新将
+使用新选择的数据源。数据源选择会在启动间保存。WSL 发行版的探测在子菜单
+打开时执行一次；启动或停止 WSL 发行版后重新打开子菜单即可刷新列表。
 
 ### 中英文切换
 
@@ -295,7 +365,7 @@ Codex 在一次模型请求完成时记录 token 用量。因此这里显示的�
 dotnet build .\windows\CodexTPS.slnx
 dotnet test .\windows\CodexTPS.slnx
 dotnet format .\windows\CodexTPS.slnx --verify-no-changes
-.\windows\scripts\New-Release.ps1 -Version 0.2.0
+.\windows\scripts\New-Release.ps1 -Version 0.3.0
 ```
 
 发布脚本会生成 Portable ZIP 和对应的 SHA-256 文件。
