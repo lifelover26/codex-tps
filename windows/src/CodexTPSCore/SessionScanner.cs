@@ -65,7 +65,7 @@ public class SessionScanner
         return Path.Combine(userProfile, ".codex");
     }
 
-    public UsageSnapshot Refresh(DateTimeOffset now)
+    public virtual UsageSnapshot Refresh(DateTimeOffset now)
     {
         lock (_syncLock)
         {

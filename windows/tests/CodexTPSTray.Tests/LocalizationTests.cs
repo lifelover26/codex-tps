@@ -274,4 +274,88 @@ public class LocalizationTests
     {
         Assert.Equal("100%", Localization.GetOverlayOpacityDisplayName(OverlayOpacityPreference.Opaque, Language.English));
     }
+
+    [Fact]
+    public void DataSourceMenu_English()
+    {
+        Assert.Equal("Data Source", Localization.DataSourceMenu(Language.English));
+    }
+
+    [Fact]
+    public void DataSourceMenu_Chinese()
+    {
+        Assert.Equal("数据源", Localization.DataSourceMenu(Language.Chinese));
+    }
+
+    [Fact]
+    public void DataSourceWindows_English()
+    {
+        Assert.Equal("Windows", Localization.DataSourceWindows(Language.English));
+    }
+
+    [Fact]
+    public void DataSourceWindows_Chinese()
+    {
+        Assert.Equal("Windows", Localization.DataSourceWindows(Language.Chinese));
+    }
+
+    [Fact]
+    public void DataSourceDetectingWsl_English()
+    {
+        Assert.Equal("Detecting WSL...", Localization.DataSourceDetectingWsl(Language.English));
+    }
+
+    [Fact]
+    public void DataSourceDetectingWsl_Chinese()
+    {
+        Assert.Equal("正在检测 WSL...", Localization.DataSourceDetectingWsl(Language.Chinese));
+    }
+
+    [Fact]
+    public void DataSourceNoWsl_English()
+    {
+        Assert.Equal("No WSL data sources", Localization.DataSourceNoWsl(Language.English));
+    }
+
+    [Fact]
+    public void DataSourceNoWsl_Chinese()
+    {
+        Assert.Equal("未找到 WSL 数据源", Localization.DataSourceNoWsl(Language.Chinese));
+    }
+
+    [Fact]
+    public void DataSourceSwitchFailed_English()
+    {
+        Assert.Equal("Failed to switch data source.", Localization.DataSourceSwitchFailed(Language.English));
+    }
+
+    [Fact]
+    public void DataSourceSwitchFailed_Chinese()
+    {
+        Assert.Equal("切换数据源失败。", Localization.DataSourceSwitchFailed(Language.Chinese));
+    }
+
+    [Fact]
+    public void DataSourceStartupWslFailed_English()
+    {
+        Assert.Equal("Failed to connect to WSL data source at startup, settings retained.", Localization.DataSourceStartupWslFailed(Language.English));
+    }
+
+    [Fact]
+    public void DataSourceStartupWslFailed_Chinese()
+    {
+        Assert.Equal("启动时无法连接到 WSL 数据源，已保留设置。", Localization.DataSourceStartupWslFailed(Language.Chinese));
+    }
+
+    [Fact]
+    public void DataSourceSaveFailed_English()
+    {
+        Assert.Equal("Failed to save data source settings.", Localization.DataSourceSaveFailed(Language.English));
+    }
+
+    [Fact]
+    public void DataSourceSaveFailed_Chinese()
+    {
+        Assert.Equal("保存数据源设置失败。", Localization.DataSourceSaveFailed(Language.Chinese));
+    }
 }

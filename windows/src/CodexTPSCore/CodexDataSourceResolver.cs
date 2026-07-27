@@ -32,9 +32,9 @@ public interface ICodexDataSourceResolver
 // rather than duplicated.
 public sealed class CodexDataSourceResolver : ICodexDataSourceResolver
 {
-    private readonly WslCodexHomeDiscovery _wslDiscovery;
+    private readonly IWslCodexHomeDiscovery _wslDiscovery;
 
-    public CodexDataSourceResolver(WslCodexHomeDiscovery wslDiscovery)
+    public CodexDataSourceResolver(IWslCodexHomeDiscovery wslDiscovery)
     {
         _wslDiscovery = wslDiscovery ?? throw new ArgumentNullException(nameof(wslDiscovery));
     }

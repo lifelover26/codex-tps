@@ -12,13 +12,18 @@ namespace CodexTPSTray;
 public class TrayIconManager : IDisposable
 {
     private readonly NotifyIcon _notifyIcon;
-    private readonly SessionScanner _sessionScanner;
+    private SessionScanner _sessionScanner;
     private readonly DispatcherTimer _refreshTimer;
     private readonly SemaphoreSlim _refreshSemaphore;
-    private readonly TraySettingsStore _settingsStore;
+    private readonly ITraySettingsStore _settingsStore;
+    private readonly CancellationToken _shutdownToken;
     private readonly SessionFolderLauncher _sessionFolderLauncher;
     private readonly StartupManager _startupManager;
     private readonly IMonitorWorkAreaProvider _workAreaProvider;
+    private readonly ICodexDataSourceResolver _dataSourceResolver;
+    private readonly IWslCodexHomeDiscovery _wslDiscovery;
+    private readonly CancellationTokenSource _shutdownCts;
+    private readonly IUiDispatcher _uiDispatcher;
 
     private MonitorPanelWindow? _monitorPanel;
     private MonitorPanelSettingsSynchronizer? _settingsSynchronizer;
@@ -73,6 +78,14 @@ public class TrayIconManager : IDisposable
     private readonly Dictionary<OverlayPositionPreset, ToolStripMenuItem> _overlayPositionMenuItems = new();
     private readonly Dictionary<OverlayOpacityPreference, ToolStripMenuItem> _overlayOpacityMenuItems = new();
     private readonly ToolStripMenuItem _themeSubmenu = new();
+    private readonly ToolStripMenuItem _dataSourceSubmenu = new();
+    private readonly ToolStripMenuItem _windowsDataSourceMenuItem = new();
+    private readonly Dictionary<string, ToolStripMenuItem> _wslDataSourceMenuItems = new();
+    private int _isDiscoveringWsl;
+    private readonly SemaphoreSlim _switchSemaphore = new(1);
+    private bool _isScannerReady;
+    private bool _isSwitchingDataSource;
+    private IReadOnlyList<ResolvedCodexDataSource>? _discoveredWslSources;
 
     internal static TrayIconManager CreateDefault()
     {
@@ -114,7 +127,7 @@ public class TrayIconManager : IDisposable
     {
     }
 
-    internal TrayIconManager(TraySettingsStore settingsStore, TraySettings initialSettings, SessionScanner sessionScanner, IShellLauncher shellLauncher, IRunKeyStore runKeyStore, Func<string?> executablePathProvider, IMonitorWorkAreaProvider workAreaProvider, IWinFormsThemeApplier winFormsThemeApplier, ThemeResolver themeResolver)
+    internal TrayIconManager(ITraySettingsStore settingsStore, TraySettings initialSettings, SessionScanner sessionScanner, IShellLauncher shellLauncher, IRunKeyStore runKeyStore, Func<string?> executablePathProvider, IMonitorWorkAreaProvider workAreaProvider, IWinFormsThemeApplier winFormsThemeApplier, ThemeResolver themeResolver, ICodexDataSourceResolver? dataSourceResolver = null, IWslCodexHomeDiscovery? wslDiscovery = null, IUiDispatcher? uiDispatcher = null)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _currentSettings = initialSettings ?? throw new ArgumentNullException(nameof(initialSettings));
@@ -123,7 +136,15 @@ public class TrayIconManager : IDisposable
         _winFormsThemeApplier = winFormsThemeApplier ?? throw new ArgumentNullException(nameof(winFormsThemeApplier));
         if (themeResolver == null) throw new ArgumentNullException(nameof(themeResolver));
 
-        _sessionFolderLauncher = new SessionFolderLauncher(() => sessionScanner.SessionsRoot, shellLauncher);
+        var wslRunner = new WslProcessRunner();
+        var directoryChecker = new CodexHomeDirectoryChecker();
+        _wslDiscovery = wslDiscovery ?? new WslCodexHomeDiscovery(wslRunner, directoryChecker);
+        _dataSourceResolver = dataSourceResolver ?? new CodexDataSourceResolver(_wslDiscovery);
+        _shutdownCts = new CancellationTokenSource();
+        _shutdownToken = _shutdownCts.Token;
+        _uiDispatcher = uiDispatcher ?? new WpfUiDispatcher();
+
+        _sessionFolderLauncher = new SessionFolderLauncher(() => _sessionScanner.SessionsRoot, shellLauncher);
         _startupManager = new StartupManager(runKeyStore, executablePathProvider);
 
         _notifyIcon = new NotifyIcon();
@@ -136,6 +157,8 @@ public class TrayIconManager : IDisposable
 
         _themeTarget = new ThemeApplicationTarget(this);
         _themeCoordinator = new ThemeApplicationCoordinator(themeResolver, _themeTarget);
+
+        _isScannerReady = _currentSettings.DataSource.Kind == CodexDataSourceKind.Windows;
     }
 
     public void Start()
@@ -145,10 +168,85 @@ public class TrayIconManager : IDisposable
         InitializeLaunchAtLoginState();
         InitializeOverlay();
 
-        _refreshTimer.Start();
-        _ = RefreshAsync();
-
         InitializeSystemThemeListener();
+
+        StartupTask = StartAsync();
+    }
+
+    internal Task StartupTask { get; private set; } = Task.CompletedTask;
+
+    internal bool IsScannerReady => _isScannerReady;
+    internal TraySettings CurrentSettings => _currentSettings;
+    internal SessionScanner SessionScanner => _sessionScanner;
+    internal UsageSnapshot? LatestSnapshot => _latestSnapshot;
+    internal IReadOnlyDictionary<string, ToolStripMenuItem> WslDataSourceMenuItems => _wslDataSourceMenuItems;
+    internal bool IsRefreshTimerEnabled => _refreshTimer.IsEnabled;
+    internal bool IsShuttingDown => _isShuttingDown;
+    internal SemaphoreSlim RefreshSemaphore => _refreshSemaphore;
+    internal SemaphoreSlim SwitchSemaphore => _switchSemaphore;
+    internal bool WindowsDataSourceMenuItemChecked => _windowsDataSourceMenuItem.Checked;
+    internal ToolStripMenuItem WindowsDataSourceMenuItem => _windowsDataSourceMenuItem;
+    internal Task? DataSourceDiscoveryTask { get; private set; }
+    internal Task? LastDataSourceSwitchTask { get; private set; }
+    internal Action? OnSwitchRejected { get; set; }
+    internal Action? OnSwitchAcquiringRefreshSemaphore { get; set; }
+    internal bool IsSwitchingDataSource => _isSwitchingDataSource;
+
+    internal void RaiseRefreshTimerTick() => OnRefreshTimerTick(null, EventArgs.Empty);
+
+    internal void SetSessionScanner(SessionScanner scanner) => _sessionScanner = scanner;
+
+    internal void RaiseLanguageSelected(Language language) => OnLanguageSelected(language);
+
+    private async Task StartAsync()
+    {
+        if (_currentSettings.DataSource.Kind == CodexDataSourceKind.Wsl)
+        {
+            await StartWslAsync(_currentSettings.DataSource, _shutdownToken).ConfigureAwait(false);
+            return;
+        }
+
+        _uiDispatcher.Invoke(() =>
+        {
+            if (!_isShuttingDown)
+            {
+                _refreshTimer.Start();
+                _ = RefreshAsync();
+            }
+        });
+    }
+
+    private async Task StartWslAsync(CodexDataSourceSelection selection, CancellationToken cancellationToken)
+    {
+        var resolved = await _dataSourceResolver.ResolveAsync(selection, cancellationToken).ConfigureAwait(false);
+
+        _uiDispatcher.Invoke(() =>
+        {
+            if (_isShuttingDown)
+                return;
+
+            // If the user switched data sources (or the app began shutting down)
+            // while resolve was in flight, do nothing: a stale success must not
+            // overwrite the new selection, and a stale failure must not show a
+            // misleading balloon for a selection the user already abandoned.
+            if (!_currentSettings.DataSource.Equals(selection))
+                return;
+
+            if (resolved == null)
+            {
+                ShowBalloonTip(Localization.DataSourceStartupWslFailed(_currentSettings.Language), ToolTipIcon.Warning);
+                return;
+            }
+
+            var newScanner = new SessionScanner(resolved.CodexHome);
+            _sessionScanner = newScanner;
+            _isScannerReady = true;
+            if (!_refreshTimer.IsEnabled)
+            {
+                _refreshTimer.Start();
+            }
+            _ = RefreshAsync();
+        });
     }
 
     private void InitializeOverlay()
@@ -290,6 +388,13 @@ public class TrayIconManager : IDisposable
             _refreshCadenceSubmenu.DropDownItems.Add(item);
         }
         _contextMenu.Items.Add(_refreshCadenceSubmenu);
+
+        _dataSourceSubmenu.Text = Localization.DataSourceMenu(_currentSettings.Language);
+        _windowsDataSourceMenuItem.Text = Localization.DataSourceWindows(_currentSettings.Language);
+        _windowsDataSourceMenuItem.Click += OnWindowsDataSourceClicked;
+        _dataSourceSubmenu.DropDownItems.Add(_windowsDataSourceMenuItem);
+        _dataSourceSubmenu.DropDownOpening += (s, e) => DataSourceDiscoveryTask = OnDataSourceSubmenuOpeningAsync(s, e);
+        _contextMenu.Items.Add(_dataSourceSubmenu);
 
         _contextMenu.Items.Add(new ToolStripSeparator());
 
@@ -590,6 +695,184 @@ public class TrayIconManager : IDisposable
         }
     }
 
+    private void OnWindowsDataSourceClicked(object? sender, EventArgs e)
+    {
+        if (_isShuttingDown)
+            return;
+
+        LastDataSourceSwitchTask = SwitchDataSourceAsync(CodexDataSourceSelection.Windows);
+    }
+
+    private void OnWslDataSourceClicked(object? sender, EventArgs e)
+    {
+        if (_isShuttingDown)
+            return;
+
+        if (sender is ToolStripMenuItem item && item.Tag is string distroName)
+        {
+            LastDataSourceSwitchTask = SwitchDataSourceAsync(CodexDataSourceSelection.ForWsl(distroName));
+        }
+    }
+
+    internal void RaiseWindowsDataSourceClicked() => OnWindowsDataSourceClicked(null, EventArgs.Empty);
+    internal void RaiseWslDataSourceClicked(string distroName)
+    {
+        if (_wslDataSourceMenuItems.TryGetValue(distroName, out var item))
+        {
+            OnWslDataSourceClicked(item, EventArgs.Empty);
+        }
+    }
+    internal void RaiseDataSourceSubmenuOpening() => DataSourceDiscoveryTask = OnDataSourceSubmenuOpeningAsync(null, EventArgs.Empty);
+    internal void RaiseOpenSessionsFolderClicked() => OnOpenSessionsFolderClicked(null, EventArgs.Empty);
+
+    private async Task OnDataSourceSubmenuOpeningAsync(object? sender, EventArgs e)
+    {
+        if (_isShuttingDown)
+            return;
+
+        if (Interlocked.CompareExchange(ref _isDiscoveringWsl, 1, 0) != 0)
+            return;
+
+        try
+        {
+            bool uiCancelled = false;
+            _uiDispatcher.Invoke(() =>
+            {
+                if (_isShuttingDown)
+                {
+                    uiCancelled = true;
+                    return;
+                }
+
+                ClearWslDataSourceMenuItems();
+
+                var detectingMenuItem = new ToolStripMenuItem(Localization.DataSourceDetectingWsl(_currentSettings.Language))
+                {
+                    Enabled = false
+                };
+                _dataSourceSubmenu.DropDownItems.Add(detectingMenuItem);
+            });
+
+            if (uiCancelled)
+                return;
+
+            var discovered = await _wslDiscovery.DiscoverAsync(_shutdownToken)
+                .ConfigureAwait(false);
+
+            _discoveredWslSources = discovered;
+
+            _uiDispatcher.Invoke(() =>
+            {
+                if (!_isShuttingDown)
+                    PopulateWslDataSourceMenu();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            _discoveredWslSources = Array.Empty<ResolvedCodexDataSource>();
+            _uiDispatcher.Invoke(() =>
+            {
+                if (!_isShuttingDown)
+                    PopulateWslDataSourceMenu();
+            });
+        }
+        catch
+        {
+            _discoveredWslSources = Array.Empty<ResolvedCodexDataSource>();
+            _uiDispatcher.Invoke(() =>
+            {
+                if (!_isShuttingDown)
+                    PopulateWslDataSourceMenu();
+            });
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isDiscoveringWsl, 0);
+        }
+    }
+
+    private void ClearWslDataSourceMenuItems()
+    {
+        var itemsToRemove = new List<ToolStripMenuItem>();
+        foreach (var item in _dataSourceSubmenu.DropDownItems)
+        {
+            if (item is ToolStripMenuItem menuItem && menuItem != _windowsDataSourceMenuItem)
+            {
+                itemsToRemove.Add(menuItem);
+            }
+        }
+        foreach (var item in itemsToRemove)
+        {
+            _dataSourceSubmenu.DropDownItems.Remove(item);
+            item.Click -= OnWslDataSourceClicked;
+            item.Dispose();
+        }
+        _wslDataSourceMenuItems.Clear();
+    }
+
+    private void PopulateWslDataSourceMenu()
+    {
+        ClearWslDataSourceMenuItems();
+
+        var discovered = _discoveredWslSources ?? Array.Empty<ResolvedCodexDataSource>();
+        var savedWslDistro = _currentSettings.DataSource.Kind == CodexDataSourceKind.Wsl
+            ? _currentSettings.DataSource.WslDistributionName
+            : null;
+
+        bool hasDiscoveredSources = discovered.Count > 0;
+        bool hasSavedWsl = !string.IsNullOrEmpty(savedWslDistro);
+
+        if (!hasDiscoveredSources && !hasSavedWsl)
+        {
+            var noWslMenuItem = new ToolStripMenuItem(Localization.DataSourceNoWsl(_currentSettings.Language))
+            {
+                Enabled = false
+            };
+            _dataSourceSubmenu.DropDownItems.Add(noWslMenuItem);
+            UpdateDataSourceMenuCheckmarks();
+            return;
+        }
+
+        foreach (var source in discovered.OrderBy(s => s.DisplayName))
+        {
+            var item = new ToolStripMenuItem(source.DisplayName);
+            item.Tag = source.Selection.WslDistributionName;
+            item.Click += OnWslDataSourceClicked;
+            _wslDataSourceMenuItems[source.Selection.WslDistributionName!] = item;
+            _dataSourceSubmenu.DropDownItems.Add(item);
+        }
+
+        if (hasSavedWsl && !_wslDataSourceMenuItems.ContainsKey(savedWslDistro!))
+        {
+            var item = new ToolStripMenuItem($"WSL: {savedWslDistro}");
+            item.Tag = savedWslDistro;
+            item.Click += OnWslDataSourceClicked;
+            _wslDataSourceMenuItems[savedWslDistro!] = item;
+            _dataSourceSubmenu.DropDownItems.Add(item);
+        }
+
+        UpdateDataSourceMenuCheckmarks();
+
+        if (_isSwitchingDataSource)
+        {
+            foreach (var kvp in _wslDataSourceMenuItems)
+            {
+                kvp.Value.Enabled = false;
+            }
+        }
+    }
+
+    private void UpdateDataSourceMenuCheckmarks()
+    {
+        _windowsDataSourceMenuItem.Checked = _currentSettings.DataSource.Kind == CodexDataSourceKind.Windows;
+
+        foreach (var kvp in _wslDataSourceMenuItems)
+        {
+            kvp.Value.Checked = _currentSettings.DataSource.Kind == CodexDataSourceKind.Wsl
+                && _currentSettings.DataSource.WslDistributionName == kvp.Key;
+        }
+    }
+
     private void UpdateMenuLocalization()
     {
         var language = _currentSettings.Language;
@@ -641,6 +924,9 @@ public class TrayIconManager : IDisposable
         {
             kvp.Value.Text = Localization.GetOverlayThemeDisplayName(kvp.Key, language);
         }
+
+        _dataSourceSubmenu.Text = Localization.DataSourceMenu(language);
+        _windowsDataSourceMenuItem.Text = Localization.DataSourceWindows(language);
     }
 
     private void OnLaunchAtLoginRequested(bool enabled)
@@ -679,40 +965,15 @@ public class TrayIconManager : IDisposable
     {
         try
         {
-            if (_isShuttingDown)
+            if (_isShuttingDown || !_isScannerReady)
                 return;
 
-            if (!await _refreshSemaphore.WaitAsync(0))
+            if (!await _refreshSemaphore.WaitAsync(0, _shutdownToken))
                 return;
 
             try
             {
-                if (_isShuttingDown)
-                    return;
-
-                _monitorPanel?.SetIsRefreshing(true);
-
-                try
-                {
-                    var snapshot = await Task.Run(() => _sessionScanner.Refresh(DateTimeOffset.UtcNow));
-
-                    if (_isShuttingDown)
-                        return;
-
-                    _latestSnapshot = snapshot;
-                    UpdateUI(snapshot);
-                    _overlayLifecycle?.EnsureVisible(_currentSettings);
-                    UpdateOverlayContent();
-
-                    _monitorPanel?.UpdateSnapshot(snapshot);
-                }
-                finally
-                {
-                    if (!_isShuttingDown)
-                    {
-                        _monitorPanel?.SetIsRefreshing(false);
-                    }
-                }
+                await ScanAndUpdateCoreAsync(_shutdownToken).ConfigureAwait(false);
             }
             finally
             {
@@ -723,8 +984,234 @@ public class TrayIconManager : IDisposable
         {
             if (!_isShuttingDown)
             {
-                _monitorPanel?.SetIsRefreshing(false);
+                _uiDispatcher.BeginInvoke(() => _monitorPanel?.SetIsRefreshing(false));
             }
+        }
+    }
+
+    private async Task ScanAndUpdateCoreAsync(CancellationToken cancellationToken)
+    {
+        if (_isShuttingDown)
+            return;
+
+        bool shouldRefresh = false;
+        _uiDispatcher.Invoke(() =>
+        {
+            if (!_isShuttingDown)
+            {
+                _monitorPanel?.SetIsRefreshing(true);
+                shouldRefresh = true;
+            }
+        });
+
+        if (!shouldRefresh)
+            return;
+
+        try
+        {
+            var snapshot = await Task.Run(() => _sessionScanner.Refresh(DateTimeOffset.UtcNow), cancellationToken)
+                .ConfigureAwait(false);
+
+            _uiDispatcher.Invoke(() =>
+            {
+                if (_isShuttingDown)
+                    return;
+
+                _latestSnapshot = snapshot;
+                UpdateUI(snapshot);
+                _overlayLifecycle?.EnsureVisible(_currentSettings);
+                UpdateOverlayContent();
+                _monitorPanel?.UpdateSnapshot(snapshot);
+            });
+        }
+        finally
+        {
+            _uiDispatcher.Invoke(() =>
+            {
+                if (!_isShuttingDown)
+                    _monitorPanel?.SetIsRefreshing(false);
+            });
+        }
+    }
+
+    private async Task SwitchDataSourceAsync(CodexDataSourceSelection selection)
+    {
+        if (_isShuttingDown)
+            return;
+
+        bool acquiredSwitchSemaphore = false;
+        try
+        {
+            acquiredSwitchSemaphore = await _switchSemaphore.WaitAsync(0, _shutdownToken).ConfigureAwait(false);
+            if (!acquiredSwitchSemaphore)
+            {
+                OnSwitchRejected?.Invoke();
+                return;
+            }
+
+            bool isSameSelection = _currentSettings.DataSource.Equals(selection);
+            if (isSameSelection && _isScannerReady)
+            {
+                _uiDispatcher.Invoke(() =>
+                {
+                    if (!_isShuttingDown)
+                        UpdateDataSourceMenuCheckmarks();
+                });
+                return;
+            }
+
+            _uiDispatcher.Invoke(() =>
+            {
+                if (!_isShuttingDown)
+                    DisableDataSourceMenuItems();
+            });
+
+            var resolved = await _dataSourceResolver.ResolveAsync(selection, _shutdownToken).ConfigureAwait(false);
+
+            if (resolved == null)
+            {
+                _uiDispatcher.Invoke(() =>
+                {
+                    if (_isShuttingDown)
+                        return;
+                    ShowBalloonTip(Localization.DataSourceSwitchFailed(_currentSettings.Language), ToolTipIcon.Warning);
+                    UpdateDataSourceMenuCheckmarks();
+                    EnableDataSourceMenuItems();
+                });
+                return;
+            }
+
+            OnSwitchAcquiringRefreshSemaphore?.Invoke();
+            await _refreshSemaphore.WaitAsync(_shutdownToken).ConfigureAwait(false);
+
+            try
+            {
+                if (_isShuttingDown)
+                    return;
+
+                var newScanner = new SessionScanner(resolved.CodexHome);
+                bool commitSuccess = false;
+
+                _uiDispatcher.Invoke(() =>
+                {
+                    if (_isShuttingDown)
+                        return;
+
+                    // Snapshot _currentSettings on the UI thread immediately before
+                    // saving, so any concurrent non-data-source setting changes
+                    // (language, theme, cadence, etc.) that occurred while resolve
+                    // was in flight are preserved alongside the new DataSource.
+                    var newSettings = _currentSettings with { DataSource = selection };
+
+                    if (!_settingsStore.TrySave(newSettings))
+                    {
+                        ShowBalloonTip(Localization.DataSourceSaveFailed(_currentSettings.Language), ToolTipIcon.Warning);
+                        return;
+                    }
+
+                    _sessionScanner = newScanner;
+                    _currentSettings = newSettings;
+                    _latestSnapshot = null;
+                    _isScannerReady = true;
+                    if (!_refreshTimer.IsEnabled)
+                    {
+                        _refreshTimer.Start();
+                    }
+                    commitSuccess = true;
+                });
+
+                if (!commitSuccess)
+                {
+                    _uiDispatcher.Invoke(() =>
+                    {
+                        if (!_isShuttingDown)
+                        {
+                            UpdateDataSourceMenuCheckmarks();
+                            EnableDataSourceMenuItems();
+                        }
+                    });
+                    return;
+                }
+
+                try
+                {
+                    await ScanAndUpdateCoreAsync(_shutdownToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // The data source has already been committed. A refresh failure
+                    // after commit is a read failure, not a switch failure; leave the
+                    // new source active and let the normal UI path show the error state.
+                }
+            }
+            finally
+            {
+                _refreshSemaphore.Release();
+                _uiDispatcher.Invoke(() =>
+                {
+                    if (!_isShuttingDown)
+                    {
+                        UpdateDataSourceMenuCheckmarks();
+                        EnableDataSourceMenuItems();
+                    }
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _uiDispatcher.Invoke(() =>
+            {
+                if (!_isShuttingDown)
+                {
+                    UpdateDataSourceMenuCheckmarks();
+                    EnableDataSourceMenuItems();
+                }
+            });
+        }
+        catch
+        {
+            _uiDispatcher.Invoke(() =>
+            {
+                if (!_isShuttingDown)
+                {
+                    ShowBalloonTip(Localization.DataSourceSwitchFailed(_currentSettings.Language), ToolTipIcon.Warning);
+                    UpdateDataSourceMenuCheckmarks();
+                    EnableDataSourceMenuItems();
+                }
+            });
+        }
+        finally
+        {
+            if (acquiredSwitchSemaphore)
+            {
+                _switchSemaphore.Release();
+            }
+        }
+    }
+
+    private void DisableDataSourceMenuItems()
+    {
+        if (_isShuttingDown)
+            return;
+
+        _isSwitchingDataSource = true;
+        _windowsDataSourceMenuItem.Enabled = false;
+        foreach (var item in _wslDataSourceMenuItems.Values)
+        {
+            item.Enabled = false;
+        }
+    }
+
+    private void EnableDataSourceMenuItems()
+    {
+        if (_isShuttingDown)
+            return;
+
+        _isSwitchingDataSource = false;
+        _windowsDataSourceMenuItem.Enabled = true;
+        foreach (var item in _wslDataSourceMenuItems.Values)
+        {
+            item.Enabled = true;
         }
     }
 
@@ -817,7 +1304,7 @@ public class TrayIconManager : IDisposable
 
     private void OnOpenSessionsFolderClicked(object? sender, EventArgs e)
     {
-        if (_isShuttingDown)
+        if (_isShuttingDown || !_isScannerReady)
             return;
 
         if (!_sessionFolderLauncher.OpenSessionsFolder())
@@ -922,6 +1409,8 @@ public class TrayIconManager : IDisposable
         {
             kvp.Value.Checked = kvp.Key == _currentSettings.OverlayOpacity;
         }
+
+        UpdateDataSourceMenuCheckmarks();
     }
 
     private void OnExitClicked(object? sender, EventArgs e)
@@ -935,6 +1424,8 @@ public class TrayIconManager : IDisposable
             return;
 
         _isShuttingDown = true;
+
+        _shutdownCts.Cancel();
 
         _systemThemeChangeCoordinator?.PrepareForShutdown();
 
@@ -963,6 +1454,9 @@ public class TrayIconManager : IDisposable
 
         if (disposing)
         {
+            _isShuttingDown = true;
+            _shutdownCts.Cancel();
+
             _refreshTimer.Stop();
 
             _systemThemeChangeCoordinator?.PrepareForShutdown();
@@ -982,6 +1476,7 @@ public class TrayIconManager : IDisposable
             _notifyIcon.ContextMenuStrip = null;
             _contextMenu?.Dispose();
             _contextMenu = null;
+
             _notifyIcon.Icon = null;
             _notifyIcon.Dispose();
             _trayIcon?.Dispose();

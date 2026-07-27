@@ -306,6 +306,41 @@ public static class Localization
         return language == Language.Chinese ? "无法读取启动设置。" : "Failed to read startup settings.";
     }
 
+    public static string DataSourceMenu(Language language)
+    {
+        return language == Language.Chinese ? "数据源" : "Data Source";
+    }
+
+    public static string DataSourceWindows(Language language)
+    {
+        return language == Language.Chinese ? "Windows" : "Windows";
+    }
+
+    public static string DataSourceDetectingWsl(Language language)
+    {
+        return language == Language.Chinese ? "正在检测 WSL..." : "Detecting WSL...";
+    }
+
+    public static string DataSourceNoWsl(Language language)
+    {
+        return language == Language.Chinese ? "未找到 WSL 数据源" : "No WSL data sources";
+    }
+
+    public static string DataSourceSwitchFailed(Language language)
+    {
+        return language == Language.Chinese ? "切换数据源失败。" : "Failed to switch data source.";
+    }
+
+    public static string DataSourceSaveFailed(Language language)
+    {
+        return language == Language.Chinese ? "保存数据源设置失败。" : "Failed to save data source settings.";
+    }
+
+    public static string DataSourceStartupWslFailed(Language language)
+    {
+        return language == Language.Chinese ? "启动时无法连接到 WSL 数据源，已保留设置。" : "Failed to connect to WSL data source at startup, settings retained.";
+    }
+
     public static string OverlayTitle(Language language)
     {
         return "Codex TPS";

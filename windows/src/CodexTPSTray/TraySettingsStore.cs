@@ -5,7 +5,7 @@ using CodexTPSCore;
 
 namespace CodexTPSTray;
 
-public class TraySettingsStore
+public class TraySettingsStore : ITraySettingsStore
 {
     private readonly string _settingsPath;
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -25,9 +25,14 @@ public class TraySettingsStore
         return new TraySettingsStore(settingsPath);
     }
 
-    public static TraySettingsStore CreateForTests(string settingsPath)
+    internal static TraySettingsStore CreateForTests(string settingsPath)
     {
         return new TraySettingsStore(settingsPath);
+    }
+
+    internal static ITraySettingsStore CreateFromSettings(TraySettings settings)
+    {
+        return new InMemoryTraySettingsStore(settings);
     }
 
     public TraySettings Load()
@@ -246,6 +251,24 @@ public class TraySettingsStore
         }
 
         return success;
+    }
+
+    private sealed class InMemoryTraySettingsStore : ITraySettingsStore
+    {
+        private TraySettings _settings;
+
+        public InMemoryTraySettingsStore(TraySettings settings)
+        {
+            _settings = settings;
+        }
+
+        public TraySettings Load() => _settings;
+
+        public bool TrySave(TraySettings settings)
+        {
+            _settings = settings;
+            return true;
+        }
     }
 
     private static MetricWindow ParseMetricWindow(string? value)

@@ -30,7 +30,13 @@ namespace CodexTPSCore;
 // JSONL content, never decodes prompts or responses, and never logs the
 // resolved Linux username or private Linux path. The DisplayName surfaced to
 // the UI contains only the distribution name, prefixed with "WSL: ".
-public sealed class WslCodexHomeDiscovery
+public interface IWslCodexHomeDiscovery
+{
+    Task<IReadOnlyList<ResolvedCodexDataSource>> DiscoverAsync(CancellationToken cancellationToken);
+    Task<ResolvedCodexDataSource?> ResolveSingleDistributionAsync(string distributionName, CancellationToken cancellationToken);
+}
+
+public sealed class WslCodexHomeDiscovery : IWslCodexHomeDiscovery
 {
     // wsl --list --quiet is normally instant. Allow generous headroom for
     // first-run WSL startup without making the UI feel stuck.
