@@ -11,6 +11,7 @@ namespace CodexTPSTray;
 public partial class OverlayWindow : Window
 {
     private readonly IMonitorWorkAreaProvider _workAreaProvider;
+    private readonly IWindowNativeInterop _native;
     private bool _isLocked;
     private bool _isShuttingDown;
     private bool _shutdownPrepared;
@@ -27,20 +28,51 @@ public partial class OverlayWindow : Window
     private const uint SWP_NOACTIVATE = 0x0010;
     private const uint SWP_FRAMECHANGED = 0x0020;
 
-    [DllImport("user32.dll")]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
 
-    [DllImport("user32.dll")]
-    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    internal interface IWindowNativeInterop
+    {
+        IntPtr GetHandle(Window window);
+        bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+        bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+        int GetWindowLong(IntPtr hWnd, int nIndex);
+        int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    }
 
-    [DllImport("user32.dll")]
-    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    private sealed class DefaultWindowNativeInterop : IWindowNativeInterop
+    {
+        [DllImport("user32.dll", EntryPoint = "SetWindowPos")]
+        private static extern bool NativeSetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
-    [DllImport("user32.dll")]
-    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+        [DllImport("user32.dll", EntryPoint = "GetWindowRect")]
+        private static extern bool NativeGetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
+        private static extern int NativeGetWindowLong(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowLong")]
+        private static extern int NativeSetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        public IntPtr GetHandle(Window window)
+        {
+            return (PresentationSource.FromVisual(window) as HwndSource)?.Handle ?? IntPtr.Zero;
+        }
+
+        public bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags)
+            => NativeSetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+
+        public bool GetWindowRect(IntPtr hWnd, out RECT lpRect)
+            => NativeGetWindowRect(hWnd, out lpRect);
+
+        public int GetWindowLong(IntPtr hWnd, int nIndex)
+            => NativeGetWindowLong(hWnd, nIndex);
+
+        public int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong)
+            => NativeSetWindowLong(hWnd, nIndex, dwNewLong);
+    }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct RECT
+    internal struct RECT
     {
         public int Left;
         public int Top;
@@ -51,9 +83,15 @@ public partial class OverlayWindow : Window
     public event Action<double, double>? DragCompleted;
 
     public OverlayWindow(IMonitorWorkAreaProvider workAreaProvider)
+        : this(workAreaProvider, new DefaultWindowNativeInterop())
+    {
+    }
+
+    internal OverlayWindow(IMonitorWorkAreaProvider workAreaProvider, IWindowNativeInterop nativeInterop)
     {
         InitializeComponent();
         _workAreaProvider = workAreaProvider;
+        _native = nativeInterop;
 
         OverlayThemeResources.Apply(Resources, EffectiveTheme.Dark);
         _currentTheme = EffectiveTheme.Dark;
@@ -91,11 +129,11 @@ public partial class OverlayWindow : Window
 
     public (double Left, double Top, double Width, double Height)? GetCurrentRect()
     {
-        var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
-        if (hwndSource == null)
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd == IntPtr.Zero)
             return null;
 
-        if (!GetWindowRect(hwndSource.Handle, out RECT rect))
+        if (!_native.GetWindowRect(hwnd, out RECT rect))
             return null;
 
         return (rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
@@ -103,16 +141,18 @@ public partial class OverlayWindow : Window
 
     public void MoveToPosition(double left, double top)
     {
-        var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
-        if (hwndSource == null)
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd == IntPtr.Zero)
             return;
 
-        SetWindowPos(hwndSource.Handle, IntPtr.Zero, (int)left, (int)top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        _native.SetWindowPos(hwnd, IntPtr.Zero, (int)left, (int)top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        EnsureTopmost();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ApplyExtendedStyles();
+        EnsureTopmost();
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -131,8 +171,8 @@ public partial class OverlayWindow : Window
 
         DragMove();
 
-        var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
-        if (hwndSource != null && GetWindowRect(hwndSource.Handle, out RECT rect))
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd != IntPtr.Zero && _native.GetWindowRect(hwnd, out RECT rect))
         {
             DragCompleted?.Invoke(rect.Left, rect.Top);
         }
@@ -140,12 +180,11 @@ public partial class OverlayWindow : Window
 
     private void ApplyExtendedStyles()
     {
-        var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
-        if (hwndSource == null)
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd == IntPtr.Zero)
             return;
 
-        IntPtr hwnd = hwndSource.Handle;
-        int currentStyle = GetWindowLong(hwnd, -20);
+        int currentStyle = _native.GetWindowLong(hwnd, -20);
 
         int originalStyle = currentStyle;
 
@@ -163,9 +202,19 @@ public partial class OverlayWindow : Window
 
         if (currentStyle != originalStyle)
         {
-            SetWindowLong(hwnd, -20, currentStyle);
-            SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            _native.SetWindowLong(hwnd, -20, currentStyle);
+            _native.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
+    }
+
+    private void EnsureTopmost()
+    {
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd == IntPtr.Zero)
+            return;
+
+        Topmost = true;
+        _native.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 
     public void UpdateContent(string[] lines)
@@ -195,6 +244,7 @@ public partial class OverlayWindow : Window
         if (wasLocked != _isLocked)
         {
             ApplyExtendedStyles();
+            EnsureTopmost();
         }
 
         _currentOpacity = settings.OverlayOpacity;
@@ -203,13 +253,11 @@ public partial class OverlayWindow : Window
 
     public void ResetPosition(TraySettings settings)
     {
-        var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
-        if (hwndSource == null)
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd == IntPtr.Zero)
             return;
 
-        IntPtr hwnd = hwndSource.Handle;
-
-        if (!GetWindowRect(hwnd, out RECT rect))
+        if (!_native.GetWindowRect(hwnd, out RECT rect))
             return;
 
         int width = rect.Right - rect.Left;
@@ -219,7 +267,8 @@ public partial class OverlayWindow : Window
             return;
 
         var (left, top) = ResolvePosition(settings, width, height);
-        SetWindowPos(hwnd, IntPtr.Zero, (int)left, (int)top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        _native.SetWindowPos(hwnd, IntPtr.Zero, (int)left, (int)top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        EnsureTopmost();
     }
 
     public (double Left, double Top) ResolvePosition(TraySettings settings, double width, double height)
