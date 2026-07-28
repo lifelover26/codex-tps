@@ -39,6 +39,12 @@ Codex TPS for Windows reads the usage events already written to local Codex
 session logs and turns them into an at-a-glance throughput display. It does not
 require an API key and does not upload conversation data.
 
+**What's new in v0.3.1:** Fixes the desktop overlay losing its always-on-top
+status while locked (click-through mode). The overlay now reliably stays on top
+regardless of lock state, after dragging, and after quick-position presets.
+Locking still means click-through and drag disabled; position presets, themes,
+opacity, and Windows/WSL data source selection are unaffected.
+
 ### Download
 
 Download the latest Portable ZIP and its `.sha256` file from
@@ -134,6 +140,11 @@ troubleshooting, removal, and release packaging.
 Codex TPS for Windows 是一款 Windows 11 托盘工具。它读取 Codex 已写入
 本机的会话用量记录，显示不同时间窗口内的 token 吞吐率。程序本身不需要
 API Key，也不会上传对话内容。
+
+**v0.3.1 更新：** 修复桌面悬浮窗在锁定（点击穿透）状态下可能失去置顶的问题。
+悬浮窗现在无论锁定/解锁、拖动后或快速定位后都可靠地保持置顶。锁定仍然代表
+点击穿透和禁止拖动；位置预设、主题、透明度以及 Windows/WSL 数据源功能不受
+影响。
 
 ### 下载与运行
 
