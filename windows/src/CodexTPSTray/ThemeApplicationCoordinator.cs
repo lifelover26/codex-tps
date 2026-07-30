@@ -14,6 +14,7 @@ internal sealed class ThemeApplicationCoordinator
     private readonly IThemeApplicationTarget _target;
     private EffectiveTheme _currentApplicationTheme = EffectiveTheme.Light;
     private EffectiveTheme _currentOverlayTheme = EffectiveTheme.Light;
+    private bool _hasApplied;
 
     public EffectiveTheme CurrentApplicationTheme => _currentApplicationTheme;
     public EffectiveTheme CurrentOverlayTheme => _currentOverlayTheme;
@@ -31,10 +32,21 @@ internal sealed class ThemeApplicationCoordinator
 
         var resolved = _themeResolver.ResolveBoth(settings.ApplicationTheme, settings.OverlayTheme);
 
+        bool applicationChanged = !_hasApplied || resolved.ApplicationTheme != _currentApplicationTheme;
+        bool overlayChanged = !_hasApplied || resolved.OverlayTheme != _currentOverlayTheme;
+
         _currentApplicationTheme = resolved.ApplicationTheme;
         _currentOverlayTheme = resolved.OverlayTheme;
+        _hasApplied = true;
 
-        _target.ApplyApplicationTheme(_currentApplicationTheme);
-        _target.ApplyOverlayTheme(_currentOverlayTheme);
+        if (applicationChanged)
+        {
+            _target.ApplyApplicationTheme(_currentApplicationTheme);
+        }
+
+        if (overlayChanged)
+        {
+            _target.ApplyOverlayTheme(_currentOverlayTheme);
+        }
     }
 }

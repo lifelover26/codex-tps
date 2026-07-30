@@ -103,6 +103,9 @@ public partial class OverlayWindow : Window
 
     internal void ApplyTheme(EffectiveTheme theme)
     {
+        if (_currentTheme == theme)
+            return;
+
         _currentTheme = theme;
         OverlayThemeResources.Apply(Resources, theme);
         ApplyOpacityToBorder();

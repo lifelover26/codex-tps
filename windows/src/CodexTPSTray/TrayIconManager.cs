@@ -41,16 +41,6 @@ public class TrayIconManager : IDisposable
     private bool _isDisposed;
     private Icon? _trayIcon;
 
-    private readonly ToolStripMenuItem _totalTpsMenuItem = new() { Enabled = false };
-    private readonly ToolStripMenuItem _inputTpsMenuItem = new() { Enabled = false };
-    private readonly ToolStripMenuItem _cachedTpsMenuItem = new() { Enabled = false };
-    private readonly ToolStripMenuItem _outputTpsMenuItem = new() { Enabled = false };
-    private readonly ToolStripMenuItem _reasoningTpsMenuItem = new() { Enabled = false };
-    private readonly ToolStripMenuItem _requestsMenuItem = new() { Enabled = false };
-    private readonly ToolStripMenuItem _activeSessionsMenuItem = new() { Enabled = false };
-    private readonly ToolStripMenuItem _cacheRatioMenuItem = new() { Enabled = false };
-    private readonly ToolStripMenuItem _statusMenuItem = new() { Enabled = false };
-
     private readonly Dictionary<MetricWindow, ToolStripMenuItem> _windowMenuItems = new();
     private readonly Dictionary<RefreshCadence, ToolStripMenuItem> _cadenceMenuItems = new();
     private readonly ToolStripMenuItem _openSessionsFolderMenuItem = new();
@@ -59,7 +49,6 @@ public class TrayIconManager : IDisposable
     private readonly ToolStripMenuItem _englishLanguageMenuItem = new();
     private readonly ToolStripMenuItem _chineseLanguageMenuItem = new();
 
-    private readonly ToolStripMenuItem _metricsSubmenu = new();
     private readonly ToolStripMenuItem _metricWindowSubmenu = new();
     private readonly ToolStripMenuItem _refreshCadenceSubmenu = new();
     private readonly ToolStripMenuItem _languageSubmenu = new();
@@ -186,6 +175,7 @@ public class TrayIconManager : IDisposable
     internal SemaphoreSlim SwitchSemaphore => _switchSemaphore;
     internal bool WindowsDataSourceMenuItemChecked => _windowsDataSourceMenuItem.Checked;
     internal ToolStripMenuItem WindowsDataSourceMenuItem => _windowsDataSourceMenuItem;
+    internal ContextMenuStrip? ContextMenuStrip => _contextMenu;
     internal Task? DataSourceDiscoveryTask { get; private set; }
     internal Task? LastDataSourceSwitchTask { get; private set; }
     internal Action? OnSwitchRejected { get; set; }
@@ -354,20 +344,6 @@ public class TrayIconManager : IDisposable
     private void InitializeContextMenu()
     {
         _contextMenu = new ContextMenuStrip();
-
-        _metricsSubmenu.Text = Localization.MetricsMenu(_currentSettings.Language);
-        _metricsSubmenu.DropDownItems.Add(_totalTpsMenuItem);
-        _metricsSubmenu.DropDownItems.Add(_inputTpsMenuItem);
-        _metricsSubmenu.DropDownItems.Add(_cachedTpsMenuItem);
-        _metricsSubmenu.DropDownItems.Add(_outputTpsMenuItem);
-        _metricsSubmenu.DropDownItems.Add(_reasoningTpsMenuItem);
-        _metricsSubmenu.DropDownItems.Add(_requestsMenuItem);
-        _metricsSubmenu.DropDownItems.Add(_activeSessionsMenuItem);
-        _metricsSubmenu.DropDownItems.Add(_cacheRatioMenuItem);
-        _metricsSubmenu.DropDownItems.Add(_statusMenuItem);
-        _contextMenu.Items.Add(_metricsSubmenu);
-
-        _contextMenu.Items.Add(new ToolStripSeparator());
 
         _metricWindowSubmenu.Text = Localization.MetricWindowMenu(_currentSettings.Language);
         foreach (MetricWindow window in Enum.GetValues<MetricWindow>())
@@ -887,7 +863,6 @@ public class TrayIconManager : IDisposable
             kvp.Value.Text = Localization.GetRefreshCadenceDisplayName(kvp.Key, language);
         }
 
-        _metricsSubmenu.Text = Localization.MetricsMenu(language);
         _metricWindowSubmenu.Text = Localization.MetricWindowMenu(language);
         _refreshCadenceSubmenu.Text = Localization.RefreshCadenceMenu(language);
         _languageSubmenu.Text = Localization.LanguageMenu(language);
@@ -1220,20 +1195,7 @@ public class TrayIconManager : IDisposable
         if (_isShuttingDown)
             return;
 
-        var metrics = _currentSettings.SelectedWindow.GetMetrics(snapshot);
-        var language = _currentSettings.Language;
-
-        _totalTpsMenuItem.Text = $"{Localization.Total(language)}: {metrics.TokensPerSecond:F1} token/s";
-        _inputTpsMenuItem.Text = $"{Localization.Input(language)}: {metrics.InputTokensPerSecond:F1} token/s";
-        _cachedTpsMenuItem.Text = $"{Localization.Cached(language)}: {metrics.CachedInputTokensPerSecond:F1} token/s";
-        _outputTpsMenuItem.Text = $"{Localization.Output(language)}: {metrics.OutputTokensPerSecond:F1} token/s";
-        _reasoningTpsMenuItem.Text = $"{Localization.Reasoning(language)}: {metrics.ReasoningTokensPerSecond:F1} token/s";
-        _requestsMenuItem.Text = $"{Localization.RequestsPerMinute(language)}: {metrics.RequestsPerMinute:F1}/min";
-        _activeSessionsMenuItem.Text = $"{Localization.ActiveSessions(language)}: {snapshot.ActiveSessions}";
-        _cacheRatioMenuItem.Text = $"{Localization.CacheRatio(language)}: {metrics.CacheRatio:P0}";
-        _statusMenuItem.Text = $"{Localization.Status(language)}: {Localization.GetStatusText(snapshot.Status, false, snapshot.MalformedRelevantLines, true, language)}";
-
-        string tooltip = TrayTextFormatter.FormatTooltip(snapshot, _currentSettings.SelectedWindow, language);
+        string tooltip = TrayTextFormatter.FormatTooltip(snapshot, _currentSettings.SelectedWindow, _currentSettings.Language);
         _notifyIcon.Text = tooltip;
     }
 

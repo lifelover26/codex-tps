@@ -251,11 +251,6 @@ public static class Localization
         return language == Language.Chinese ? "时间窗口" : "Metric Window";
     }
 
-    public static string MetricsMenu(Language language)
-    {
-        return language == Language.Chinese ? "指标" : "Metrics";
-    }
-
     public static string Total(Language language)
     {
         return language == Language.Chinese ? "总计" : "Total";

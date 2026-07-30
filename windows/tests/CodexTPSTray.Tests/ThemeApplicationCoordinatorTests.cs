@@ -331,4 +331,136 @@ public class ThemeApplicationCoordinatorTests
         Assert.Equal(EffectiveTheme.Dark, target.AppliedOverlayTheme);
         Assert.Equal(1, systemSource.CallCount);
     }
+
+    [Fact]
+    public void Apply_SameSettingsRepeated_DoesNotIncreaseCallCount()
+    {
+        var systemSource = new TrackingSystemThemeSource { ReturnValue = EffectiveTheme.Dark };
+        var resolver = new ThemeResolver(systemSource);
+        var target = new FakeThemeApplicationTarget();
+        var coordinator = new ThemeApplicationCoordinator(resolver, target);
+
+        var settings = new TraySettings(
+            SelectedWindow: MetricWindow.OneMinute,
+            RefreshCadence: RefreshCadence.FifteenSeconds,
+            ApplicationTheme: ApplicationThemePreference.System,
+            OverlayTheme: OverlayThemePreference.FollowApplication
+        );
+
+        coordinator.Apply(settings);
+        Assert.Equal(1, target.ApplicationApplyCount);
+        Assert.Equal(1, target.OverlayApplyCount);
+
+        coordinator.Apply(settings);
+        Assert.Equal(1, target.ApplicationApplyCount);
+        Assert.Equal(1, target.OverlayApplyCount);
+
+        coordinator.Apply(settings);
+        Assert.Equal(1, target.ApplicationApplyCount);
+        Assert.Equal(1, target.OverlayApplyCount);
+    }
+
+    [Fact]
+    public void Apply_AppSystemOverlayDark_SystemUnchanged_NeitherTargetRecalled()
+    {
+        var systemSource = new TrackingSystemThemeSource { ReturnValue = EffectiveTheme.Light };
+        var resolver = new ThemeResolver(systemSource);
+        var target = new FakeThemeApplicationTarget();
+        var coordinator = new ThemeApplicationCoordinator(resolver, target);
+
+        var settings = new TraySettings(
+            SelectedWindow: MetricWindow.OneMinute,
+            RefreshCadence: RefreshCadence.FifteenSeconds,
+            ApplicationTheme: ApplicationThemePreference.System,
+            OverlayTheme: OverlayThemePreference.Dark
+        );
+
+        coordinator.Apply(settings);
+        Assert.Equal(1, target.ApplicationApplyCount);
+        Assert.Equal(1, target.OverlayApplyCount);
+        Assert.Equal(EffectiveTheme.Light, target.AppliedApplicationTheme);
+        Assert.Equal(EffectiveTheme.Dark, target.AppliedOverlayTheme);
+
+        coordinator.Apply(settings);
+        Assert.Equal(1, target.ApplicationApplyCount);
+        Assert.Equal(1, target.OverlayApplyCount);
+    }
+
+    [Fact]
+    public void Apply_AppSystemOverlayDark_SystemLightToDark_OnlyApplicationRecalled()
+    {
+        var systemSource = new TrackingSystemThemeSource { ReturnValue = EffectiveTheme.Light };
+        var resolver = new ThemeResolver(systemSource);
+        var target = new FakeThemeApplicationTarget();
+        var coordinator = new ThemeApplicationCoordinator(resolver, target);
+
+        var settings = new TraySettings(
+            SelectedWindow: MetricWindow.OneMinute,
+            RefreshCadence: RefreshCadence.FifteenSeconds,
+            ApplicationTheme: ApplicationThemePreference.System,
+            OverlayTheme: OverlayThemePreference.Dark
+        );
+
+        coordinator.Apply(settings);
+        Assert.Equal(1, target.ApplicationApplyCount);
+        Assert.Equal(1, target.OverlayApplyCount);
+        Assert.Equal(EffectiveTheme.Light, target.AppliedApplicationTheme);
+
+        systemSource.ReturnValue = EffectiveTheme.Dark;
+        coordinator.Apply(settings);
+
+        Assert.Equal(2, target.ApplicationApplyCount);
+        Assert.Equal(1, target.OverlayApplyCount);
+        Assert.Equal(EffectiveTheme.Dark, target.AppliedApplicationTheme);
+        Assert.Equal(EffectiveTheme.Dark, target.AppliedOverlayTheme);
+    }
+
+    [Fact]
+    public void Apply_OverlayRealChange_OnlyOverlayRecalled()
+    {
+        var systemSource = new TrackingSystemThemeSource();
+        var resolver = new ThemeResolver(systemSource);
+        var target = new FakeThemeApplicationTarget();
+        var coordinator = new ThemeApplicationCoordinator(resolver, target);
+
+        var darkSettings = new TraySettings(
+            SelectedWindow: MetricWindow.OneMinute,
+            RefreshCadence: RefreshCadence.FifteenSeconds,
+            ApplicationTheme: ApplicationThemePreference.Light,
+            OverlayTheme: OverlayThemePreference.Dark
+        );
+
+        coordinator.Apply(darkSettings);
+        Assert.Equal(1, target.ApplicationApplyCount);
+        Assert.Equal(1, target.OverlayApplyCount);
+        Assert.Equal(EffectiveTheme.Dark, target.AppliedOverlayTheme);
+
+        var lightSettings = darkSettings with { OverlayTheme = OverlayThemePreference.Light };
+        coordinator.Apply(lightSettings);
+
+        Assert.Equal(1, target.ApplicationApplyCount);
+        Assert.Equal(2, target.OverlayApplyCount);
+        Assert.Equal(EffectiveTheme.Light, target.AppliedOverlayTheme);
+    }
+
+    [Fact]
+    public void Apply_FirstApply_AlwaysCallsBothTargetsEvenForDefaultLight()
+    {
+        var systemSource = new TrackingSystemThemeSource { ReturnValue = EffectiveTheme.Light };
+        var resolver = new ThemeResolver(systemSource);
+        var target = new FakeThemeApplicationTarget();
+        var coordinator = new ThemeApplicationCoordinator(resolver, target);
+
+        var settings = new TraySettings(
+            SelectedWindow: MetricWindow.OneMinute,
+            RefreshCadence: RefreshCadence.FifteenSeconds,
+            ApplicationTheme: ApplicationThemePreference.Light,
+            OverlayTheme: OverlayThemePreference.FollowApplication
+        );
+
+        coordinator.Apply(settings);
+
+        Assert.Equal(1, target.ApplicationApplyCount);
+        Assert.Equal(1, target.OverlayApplyCount);
+    }
 }

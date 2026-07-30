@@ -611,13 +611,6 @@ public class MonitorPanelViewModelTests
     }
 
     [Fact]
-    public void Localization_MetricsMenu()
-    {
-        Assert.Equal("Metrics", Localization.MetricsMenu(Language.English));
-        Assert.Equal("指标", Localization.MetricsMenu(Language.Chinese));
-    }
-
-    [Fact]
     public void Localization_Total()
     {
         Assert.Equal("Total", Localization.Total(Language.English));
