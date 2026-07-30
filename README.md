@@ -39,11 +39,14 @@ Codex TPS for Windows reads the usage events already written to local Codex
 session logs and turns them into an at-a-glance throughput display. It does not
 require an API key and does not upload conversation data.
 
-**What's new in v0.3.1:** Fixes the desktop overlay losing its always-on-top
-status while locked (click-through mode). The overlay now reliably stays on top
-regardless of lock state, after dragging, and after quick-position presets.
-Locking still means click-through and drag disabled; position presets, themes,
-opacity, and Windows/WSL data source selection are unaffected.
+**What's new in v0.3.2:** Reduces redundant theme resource rebuilds for the
+desktop overlay. When no effective theme change has occurred, the Windows
+application and overlay themes are no longer reapplied, so a fixed overlay theme
+is not repeatedly rebuilt in response to unrelated system preference
+notifications. This improves overlay appearance stability. The read-only
+`Metrics` submenu has also been removed from the tray right-click menu; the
+actionable `Metric Window` menu, tray tooltip, desktop overlay, and detailed
+metrics panel continue to show throughput data.
 
 ### Download
 
@@ -141,10 +144,11 @@ Codex TPS for Windows 是一款 Windows 11 托盘工具。它读取 Codex 已写
 本机的会话用量记录，显示不同时间窗口内的 token 吞吐率。程序本身不需要
 API Key，也不会上传对话内容。
 
-**v0.3.1 更新：** 修复桌面悬浮窗在锁定（点击穿透）状态下可能失去置顶的问题。
-悬浮窗现在无论锁定/解锁、拖动后或快速定位后都可靠地保持置顶。锁定仍然代表
-点击穿透和禁止拖动；位置预设、主题、透明度以及 Windows/WSL 数据源功能不受
-影响。
+**v0.3.2 更新：** 减少桌面悬浮窗的冗余主题资源重建。当未发生有效主题变化时，
+不再重复应用 Windows 应用与悬浮窗主题，因此固定的悬浮窗主题不会因无关的系统
+偏好通知而被重复重建，提升悬浮窗外观稳定性。同时移除托盘右键菜单中只读的
+`Metrics` 子菜单；可操作的 `Metric Window` 菜单、托盘 tooltip、桌面悬浮窗和
+详细监控面板的指标展示不受影响。
 
 ### 下载与运行
 
