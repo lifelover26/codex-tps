@@ -39,14 +39,16 @@ Codex TPS for Windows reads the usage events already written to local Codex
 session logs and turns them into an at-a-glance throughput display. It does not
 require an API key and does not upload conversation data.
 
-**What's new in v0.3.2:** Reduces redundant theme resource rebuilds for the
-desktop overlay. When no effective theme change has occurred, the Windows
-application and overlay themes are no longer reapplied, so a fixed overlay theme
-is not repeatedly rebuilt in response to unrelated system preference
-notifications. This improves overlay appearance stability. The read-only
-`Metrics` submenu has also been removed from the tray right-click menu; the
-actionable `Metric Window` menu, tray tooltip, desktop overlay, and detailed
-metrics panel continue to show throughput data.
+**What's new in v0.3.3:** Fixes an issue where the desktop overlay could lose
+its always-on-top state after Windows sleep/resume, session unlock/reconnect,
+or display configuration recovery. The app now listens for relevant Windows
+recovery events and reasserts the overlay's native topmost state immediately
+and once again after a short delay. Recovery never shows a disabled or hidden
+overlay, does not activate or move the window, and preserves themes, opacity,
+position, lock state, and Windows/WSL data-source settings. This applies to
+normal desktop windows; it does not override the UAC secure desktop, exclusive
+fullscreen programs, or other forced-topmost windows. This extends the v0.3.1
+topmost fix to system recovery scenarios.
 
 ### Download
 
@@ -144,11 +146,12 @@ Codex TPS for Windows 是一款 Windows 11 托盘工具。它读取 Codex 已写
 本机的会话用量记录，显示不同时间窗口内的 token 吞吐率。程序本身不需要
 API Key，也不会上传对话内容。
 
-**v0.3.2 更新：** 减少桌面悬浮窗的冗余主题资源重建。当未发生有效主题变化时，
-不再重复应用 Windows 应用与悬浮窗主题，因此固定的悬浮窗主题不会因无关的系统
-偏好通知而被重复重建，提升悬浮窗外观稳定性。同时移除托盘右键菜单中只读的
-`Metrics` 子菜单；可操作的 `Metric Window` 菜单、托盘 tooltip、桌面悬浮窗和
-详细监控面板的指标展示不受影响。
+**v0.3.3 更新：** 修复桌面悬浮窗在 Windows 睡眠唤醒、会话解锁/重新连接或
+显示配置恢复后可能丢失置顶的问题。程序现在监听相关 Windows 恢复事件，并立即
+及短暂延迟后再次通过原生方式恢复置顶。恢复过程不会显示已关闭或禁用的悬浮窗，
+不会抢焦点、移动窗口，也不改变主题、透明度、位置、锁定状态及 Windows/WSL
+数据源设置。该行为针对普通桌面窗口，不覆盖 UAC 安全桌面、独占全屏程序或其他
+强制置顶窗口。本次修复是在 v0.3.1 锁定/定位置顶修复基础上补全系统恢复场景。
 
 ### 下载与运行
 
