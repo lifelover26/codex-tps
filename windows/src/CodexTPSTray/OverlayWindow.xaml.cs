@@ -220,6 +220,11 @@ public partial class OverlayWindow : Window
         _native.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 
+    internal void ReassertTopmost()
+    {
+        EnsureTopmost();
+    }
+
     public void UpdateContent(string[] lines)
     {
         if (_isShuttingDown)

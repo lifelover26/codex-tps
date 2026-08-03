@@ -34,6 +34,7 @@ public class TrayIconManager : IDisposable
     private readonly IWinFormsThemeApplier _winFormsThemeApplier;
     private ContextMenuStrip? _contextMenu;
     private SystemThemeChangeCoordinator? _systemThemeChangeCoordinator;
+    private OverlayTopmostRecoveryCoordinator? _overlayRecoveryCoordinator;
 
     private UsageSnapshot? _latestSnapshot;
     private TraySettings _currentSettings;
@@ -158,6 +159,7 @@ public class TrayIconManager : IDisposable
         InitializeOverlay();
 
         InitializeSystemThemeListener();
+        InitializeOverlayRecoveryListener();
 
         StartupTask = StartAsync();
     }
@@ -266,6 +268,21 @@ public class TrayIconManager : IDisposable
         _systemThemeChangeCoordinator.Start();
     }
 
+    private void InitializeOverlayRecoveryListener()
+    {
+        try
+        {
+            var source = new SystemEventsOverlayRecoverySource();
+            var dispatcher = new WpfDispatcher();
+            var target = new OverlayRecoveryTarget(this);
+            _overlayRecoveryCoordinator = new OverlayTopmostRecoveryCoordinator(source, dispatcher, target);
+            _overlayRecoveryCoordinator.Start();
+        }
+        catch
+        {
+        }
+    }
+
     private sealed class OverlayWindowAdapter : IOverlayWindowAdapter
     {
         private readonly OverlayWindow _window;
@@ -281,6 +298,24 @@ public class TrayIconManager : IDisposable
         public void UpdateSettings(TraySettings settings) => _window.UpdateSettings(settings);
 
         public void ResetPosition(TraySettings settings) => _window.ResetPosition(settings);
+    }
+
+    private sealed class OverlayRecoveryTarget : IOverlayTopmostRecoveryTarget
+    {
+        private readonly TrayIconManager _manager;
+
+        public OverlayRecoveryTarget(TrayIconManager manager) => _manager = manager;
+
+        public bool IsVisible => _manager._overlayWindow?.IsVisible ?? false;
+
+        public bool IsEnabled => _manager._currentSettings.OverlayEnabled && !_manager._isShuttingDown;
+
+        public void ReassertTopmost()
+        {
+            if (_manager._isShuttingDown)
+                return;
+            _manager._overlayWindow?.ReassertTopmost();
+        }
     }
 
     private sealed class ThemeApplicationTarget : IThemeApplicationTarget
@@ -1389,6 +1424,7 @@ public class TrayIconManager : IDisposable
 
         _shutdownCts.Cancel();
 
+        _overlayRecoveryCoordinator?.PrepareForShutdown();
         _systemThemeChangeCoordinator?.PrepareForShutdown();
 
         _refreshTimer.Stop();
@@ -1420,6 +1456,10 @@ public class TrayIconManager : IDisposable
             _shutdownCts.Cancel();
 
             _refreshTimer.Stop();
+
+            _overlayRecoveryCoordinator?.PrepareForShutdown();
+            _overlayRecoveryCoordinator?.Dispose();
+            _overlayRecoveryCoordinator = null;
 
             _systemThemeChangeCoordinator?.PrepareForShutdown();
             _systemThemeChangeCoordinator?.Dispose();
