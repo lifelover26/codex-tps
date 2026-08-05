@@ -17,10 +17,10 @@
       in app.manifest (PerMonitorV2). WinForms' auto-generated manifest/config is not used.
     -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
-    <Version>0.3.3</Version>
-    <AssemblyVersion>0.3.3.0</AssemblyVersion>
-    <FileVersion>0.3.3.0</FileVersion>
-    <InformationalVersion>0.3.3</InformationalVersion>
+    <Version>0.3.4</Version>
+    <AssemblyVersion>0.3.4.0</AssemblyVersion>
+    <FileVersion>0.3.4.0</FileVersion>
+    <InformationalVersion>0.3.4</InformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

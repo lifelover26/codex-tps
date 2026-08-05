@@ -4,6 +4,29 @@ A privacy-first Windows 11 tray monitor for local Codex token throughput.
 The release is a self-contained Portable ZIP: extract it and run the executable;
 no installer or separately installed .NET runtime is required.
 
+**What's new in v0.3.4:**
+
+- Adds Windows PerMonitorV2 DPI awareness. The detailed panel and desktop
+  overlay re-render at the correct scale when moved between monitors with
+  different scaling percentages, without restarting the app to recover
+  sharpness.
+- Overlay position presets now compute margins using the target monitor's
+  DPI, so presets remain anchored correctly after a DPI change. Custom drag
+  positions continue to use absolute custom-coordinate semantics; after a
+  DPI change the final physical coordinates are synced back to settings, so
+  the next launch resumes from the corrected position rather than a stale
+  preset.
+- On DPI changes, the metrics panel repositions using the monitor that the
+  window is currently on, rather than jumping to the monitor that contains
+  the cursor.
+- Renames the overlay theme menu option "System" to "Follow Windows" in
+  English. The underlying setting enumeration and persisted JSON value are
+  unchanged, so existing settings remain compatible.
+- WPF natively handles per-monitor scaling; this release does not apply an
+  additional ScaleTransform, avoiding double scaling. This targets normal
+  desktop windows; it does not override the UAC secure desktop, exclusive
+  fullscreen programs, or other forced-topmost windows.
+
 **What's new in v0.3.3:**
 
 - Fixes an issue where the desktop overlay could lose its always-on-top state
@@ -62,7 +85,7 @@ no installer or separately installed .NET runtime is required.
 
 ### Install and Run
 
-1. Download `Codex-TPS-Windows-x64-Portable-0.3.3.zip` and its `.sha256` file.
+1. Download `Codex-TPS-Windows-x64-Portable-0.3.4.zip` and its `.sha256` file.
 2. Verify the checksum before extracting the ZIP.
 3. Extract the ZIP to a stable writable directory, for example:
 
@@ -151,10 +174,15 @@ immediately. The selection is saved across launches.
 ### Themes
 
 The top-level `Theme` menu selects `System`, `Light`, or `Dark` for the detailed
-panel and tray menu. `Overlay > Theme` independently selects `Follow Application`,
-`System`, `Light`, or `Dark` for the overlay. Theme selections are saved. When
-`System` is selected, the appearance updates in real time when the Windows light
-or dark mode changes, without restarting the app.
+panel and tray menu. `Overlay > Theme` independently selects
+`Follow Application`, `Follow Windows`, `Light`, or `Dark` for the overlay.
+Theme selections are saved. Both the top-level `System` option and the overlay
+`Follow Windows` option follow the Windows light or dark mode, and the
+appearance updates in real time when that mode changes, without restarting the
+app. In this release, only the overlay's English label `System` is renamed to
+`Follow Windows`; the top-level `System` label is unchanged, and the underlying
+setting enumeration and persisted JSON value are unchanged, so existing settings
+remain compatible.
 
 ### Launch at Login
 
@@ -206,7 +234,7 @@ Existing settings remain in `%LOCALAPPDATA%\CodexTPS`.
 Do not run or extract the package if verification fails.
 
 ```powershell
-$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.3.3.zip"
+$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.3.4.zip"
 $checksumPath = "$zipPath.sha256"
 
 $expectedHash = (Get-Content $checksumPath -Raw).Split('  ')[0].Trim()
@@ -250,14 +278,14 @@ dotnet format .\windows\CodexTPS.slnx --verify-no-changes
 Create the x64 Portable release:
 
 ```powershell
-.\windows\scripts\New-Release.ps1 -Version 0.3.3
+.\windows\scripts\New-Release.ps1 -Version 0.3.4
 ```
 
 The script creates:
 
 ```text
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.3.zip
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.3.zip.sha256
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.4.zip
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.4.zip.sha256
 ```
 
 The ZIP contains exactly:
@@ -271,6 +299,21 @@ The ZIP contains exactly:
 Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 token
 吞吐率的 Windows 11 托盘工具。发布包为自包含 Portable ZIP：解压后即可
 运行，不需要安装程序，也不需要单独安装 .NET 运行时。
+
+**v0.3.4 更新内容：**
+
+- 新增 Windows PerMonitorV2 DPI 感知。详细面板与桌面悬浮窗在不同缩放比例
+  显示器之间移动时会按新 DPI 重新渲染，无需重启即可恢复清晰度。
+- 位置预设改用目标显示器的 DPI 计算边距，DPI 变化后预设位置仍能正确锚定。
+  自定义拖动位置继续保持自定义绝对坐标语义；DPI 变化后会将最终物理坐标同步
+  回设置，下次启动从修正后的位置恢复，而不是回到旧的预设。
+- DPI 变化时，详细面板会基于窗口当前所在显示器重新定位，不会跳到鼠标所在
+  显示器。
+- 悬浮窗英文主题菜单中的 "System" 改为 "Follow Windows"。原有设置枚举与
+  持久化 JSON 值不变，已有设置保持兼容。
+- WPF 原生处理 PerMonitor 缩放，本次不额外应用 ScaleTransform，避免双重
+  缩放。上述行为针对普通桌面窗口，不覆盖 UAC 安全桌面、独占全屏程序或其他
+  强制置顶窗口。
 
 **v0.3.3 更新内容：**
 
@@ -316,7 +359,7 @@ Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 tok
 
 ### 安装与启动
 
-1. 下载 `Codex-TPS-Windows-x64-Portable-0.3.3.zip` 和对应的 `.sha256`。
+1. 下载 `Codex-TPS-Windows-x64-Portable-0.3.4.zip` 和对应的 `.sha256`。
 2. 校验 SHA-256 后再解压。
 3. 解压到稳定且可写的目录，例如 `%USERPROFILE%\Apps\CodexTPS`。
 4. 运行 `CodexTPSTray.exe`。
@@ -387,8 +430,10 @@ Alt+Tab 中，普通截图和录屏会包含它。
 
 顶层“主题”菜单可为详细面板和托盘菜单选择“跟随系统”、“浅色”或“深色”。
 “悬浮窗 > 主题”可独立选择“跟随应用”、“跟随系统”、“浅色”或“深色”。主题
-选择会保存。选择“跟随系统”时，Windows 明暗模式变化后会实时更新，无需
-重启。
+选择会保存。顶层“跟随系统”与悬浮窗“跟随系统”都表示跟随 Windows 明暗模式，
+选择后 Windows 明暗模式变化时会实时更新，无需重启。本次只修改悬浮窗的英文
+显示文案（将 "System" 改为 "Follow Windows"），中文仍显示“跟随系统”，
+顶层英文 "System" 标签不变；设置枚举与 JSON 持久化值不变，已有设置保持兼容。
 
 ### 登录时启动
 
@@ -430,7 +475,7 @@ Alt+Tab 中，普通截图和录屏会包含它。
 dotnet build .\windows\CodexTPS.slnx
 dotnet test .\windows\CodexTPS.slnx
 dotnet format .\windows\CodexTPS.slnx --verify-no-changes
-.\windows\scripts\New-Release.ps1 -Version 0.3.3
+.\windows\scripts\New-Release.ps1 -Version 0.3.4
 ```
 
 发布脚本会生成 Portable ZIP 和对应的 SHA-256 文件。

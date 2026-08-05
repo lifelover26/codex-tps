@@ -39,16 +39,20 @@ Codex TPS for Windows reads the usage events already written to local Codex
 session logs and turns them into an at-a-glance throughput display. It does not
 require an API key and does not upload conversation data.
 
-**What's new in v0.3.3:** Fixes an issue where the desktop overlay could lose
-its always-on-top state after Windows sleep/resume, session unlock/reconnect,
-or display configuration recovery. The app now listens for relevant Windows
-recovery events and reasserts the overlay's native topmost state immediately
-and once again after a short delay. Recovery never shows a disabled or hidden
-overlay, does not activate or move the window, and preserves themes, opacity,
-position, lock state, and Windows/WSL data-source settings. This applies to
-normal desktop windows; it does not override the UAC secure desktop, exclusive
-fullscreen programs, or other forced-topmost windows. This extends the v0.3.1
-topmost fix to system recovery scenarios.
+**What's new in v0.3.4:** Adds Windows PerMonitorV2 DPI awareness. The detailed
+panel and desktop overlay re-render at the correct scale when moved between
+monitors with different scaling percentages, without restarting to recover
+sharpness. Overlay position presets now compute margins using the target
+monitor's DPI and re-anchor after a DPI change; custom drag positions keep
+their custom-coordinate semantics and sync the final physical coordinates back
+to settings. On DPI changes, the metrics panel repositions on the monitor the
+window is currently on, rather than jumping to the monitor that contains the
+cursor. The overlay theme menu option "System" is renamed to "Follow Windows"
+in English; the underlying setting enumeration and persisted JSON value are
+unchanged, so existing settings remain compatible. WPF natively handles
+per-monitor scaling; no additional ScaleTransform is applied, avoiding double
+scaling. This targets normal desktop windows; it does not override the UAC
+secure desktop, exclusive fullscreen programs, or other forced-topmost windows.
 
 ### Download
 
@@ -146,12 +150,15 @@ Codex TPS for Windows 是一款 Windows 11 托盘工具。它读取 Codex 已写
 本机的会话用量记录，显示不同时间窗口内的 token 吞吐率。程序本身不需要
 API Key，也不会上传对话内容。
 
-**v0.3.3 更新：** 修复桌面悬浮窗在 Windows 睡眠唤醒、会话解锁/重新连接或
-显示配置恢复后可能丢失置顶的问题。程序现在监听相关 Windows 恢复事件，并立即
-及短暂延迟后再次通过原生方式恢复置顶。恢复过程不会显示已关闭或禁用的悬浮窗，
-不会抢焦点、移动窗口，也不改变主题、透明度、位置、锁定状态及 Windows/WSL
-数据源设置。该行为针对普通桌面窗口，不覆盖 UAC 安全桌面、独占全屏程序或其他
-强制置顶窗口。本次修复是在 v0.3.1 锁定/定位置顶修复基础上补全系统恢复场景。
+**v0.3.4 更新：** 新增 Windows PerMonitorV2 DPI 感知。详细面板与桌面悬浮窗
+在不同缩放比例显示器之间移动时会按新 DPI 重新渲染，无需重启即可恢复清晰度。
+悬浮窗位置预设改用目标显示器的 DPI 计算边距，DPI 变化后仍能正确锚定；自定义
+拖动位置继续保持自定义坐标语义，并将最终物理坐标同步回设置。DPI 变化时，详细
+面板会基于窗口当前所在显示器重新定位，不会跳到鼠标所在显示器。悬浮窗英文主题
+菜单中的 "System" 改为 "Follow Windows"；原有设置枚举与持久化 JSON 值不变，
+已有设置保持兼容。WPF 原生处理 PerMonitor 缩放，本次不额外应用 ScaleTransform，
+避免双重缩放。上述行为针对普通桌面窗口，不覆盖 UAC 安全桌面、独占全屏程序或
+其他强制置顶窗口。
 
 ### 下载与运行
 
