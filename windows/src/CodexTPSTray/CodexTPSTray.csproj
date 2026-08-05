@@ -10,6 +10,13 @@
     <RootNamespace>CodexTPSTray</RootNamespace>
     <AssemblyName>CodexTPSTray</AssemblyName>
     <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!--
+      Suppress WinForms high-DPI manifest warning WFO0003: in this mixed WPF + WinForms
+      application, the entry point is WPF App.xaml and DPI awareness is declared authoritatively
+      in app.manifest (PerMonitorV2). WinForms' auto-generated manifest/config is not used.
+    -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <Version>0.3.3</Version>
     <AssemblyVersion>0.3.3.0</AssemblyVersion>
     <FileVersion>0.3.3.0</FileVersion>

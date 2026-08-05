@@ -397,7 +397,7 @@ public static class Localization
         return preference switch
         {
             OverlayThemePreference.FollowApplication => language == Language.Chinese ? "跟随应用" : "Follow Application",
-            OverlayThemePreference.System => language == Language.Chinese ? "跟随系统" : "System",
+            OverlayThemePreference.System => language == Language.Chinese ? "跟随系统" : "Follow Windows",
             OverlayThemePreference.Light => language == Language.Chinese ? "浅色" : "Light",
             OverlayThemePreference.Dark => language == Language.Chinese ? "深色" : "Dark",
             _ => language == Language.Chinese ? "跟随应用" : "Follow Application"

@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using CodexTPSCore;
 
 namespace CodexTPSTray;
@@ -14,6 +15,14 @@ public partial class MonitorPanelWindow : Window
     private bool _isSynchronizingControls;
     private bool _isShuttingDown;
     private bool _shutdownPrepared;
+    private HwndSource? _hwndSource;
+    private readonly DpiRepositionGuard _dpiGuard = new();
+
+    /// <summary>
+    /// Resolves a physical screen point to a Screen. Injectable for tests so
+    /// they can verify DPI reposition uses the window center, not Cursor.Position.
+    /// </summary>
+    internal Func<System.Drawing.Point, Screen?> ScreenFromPointResolver { get; set; } = p => Screen.FromPoint(p);
 
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOZORDER = 0x0004;
@@ -25,7 +34,7 @@ public partial class MonitorPanelWindow : Window
     private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct RECT
+    internal struct RECT
     {
         public int Left;
         public int Top;
@@ -46,8 +55,50 @@ public partial class MonitorPanelWindow : Window
 
         PanelThemeResources.Apply(Resources, EffectiveTheme.Light);
 
+        SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         Closing += OnClosing;
+        IsVisibleChanged += OnIsVisibleChanged;
+    }
+
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        _hwndSource = PresentationSource.FromVisual(this) as HwndSource;
+        if (_hwndSource != null)
+        {
+            _hwndSource.DpiChanged += OnHwndSourceDpiChanged;
+        }
+    }
+
+    private void OnHwndSourceDpiChanged(object sender, System.Windows.HwndDpiChangedEventArgs e)
+    {
+        // Let WPF handle native PerMonitorV2 DPI re-layout automatically.
+        // Do not set e.Handled or apply ScaleTransform (avoids double scaling).
+        if (_isShuttingDown)
+            return;
+
+        long captured = _dpiGuard.Queue();
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            if (!_dpiGuard.IsCurrent(captured))
+                return;
+
+            ExecuteDpiReposition();
+        }));
+    }
+
+    /// <summary>
+    /// Executes the DPI reposition logic. Extracted as an internal method so tests
+    /// can verify behavior without relying on real DPI events or reflection.
+    /// </summary>
+    internal void ExecuteDpiReposition()
+    {
+        if (_isShuttingDown || !IsLoaded || !IsVisible)
+            return;
+
+        // On DPI change for an already-visible window: stay on the monitor the window
+        // is currently on (by window rect), do NOT jump to cursor screen.
+        RepositionToCurrentMonitor();
     }
 
     internal void ApplyTheme(EffectiveTheme theme)
@@ -64,18 +115,37 @@ public partial class MonitorPanelWindow : Window
         KeyDown += OnKeyDown;
     }
 
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        // When window hides, invalidate any pending DPI reposition so a queued
+        // callback from before the hide cannot reposition the window after a
+        // subsequent Show.
+        if (!(bool)e.NewValue)
+        {
+            _dpiGuard.Invalidate();
+        }
+    }
+
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (!_isShuttingDown)
         {
             e.Cancel = true;
             Hide();
+            return;
+        }
+
+        _dpiGuard.Invalidate();
+        if (_hwndSource != null)
+        {
+            _hwndSource.DpiChanged -= OnHwndSourceDpiChanged;
+            _hwndSource = null;
         }
     }
 
     private void OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (e.Key == System.Windows.Input.Key.Escape)
+        if (e.Key == Key.Escape)
         {
             Hide();
         }
@@ -90,7 +160,8 @@ public partial class MonitorPanelWindow : Window
 
         try
         {
-            PositionNearTray();
+            // Initial show: open near the tray on the screen where the cursor currently is.
+            PositionNearCursorScreen();
         }
         finally
         {
@@ -99,7 +170,55 @@ public partial class MonitorPanelWindow : Window
         }
     }
 
-    private void PositionNearTray()
+    private void RepositionToCurrentMonitor()
+    {
+        try
+        {
+            var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
+            if (hwndSource == null)
+                return;
+
+            IntPtr hwnd = hwndSource.Handle;
+            if (!GetWindowRect(hwnd, out RECT rect))
+                return;
+
+            int windowWidth = rect.Right - rect.Left;
+            int windowHeight = rect.Bottom - rect.Top;
+            if (windowWidth <= 0 || windowHeight <= 0)
+                return;
+
+            // Find the screen that contains the window center (most reliable for already-visible windows).
+            Screen? screen = ResolveScreenFromWindowRect(rect);
+
+            if (screen == null)
+                screen = Screen.PrimaryScreen;
+            if (screen == null)
+                return;
+
+            PositionWindowToScreenBottomRight(hwnd, screen, windowWidth, windowHeight);
+        }
+        catch
+        {
+        }
+    }
+
+    /// <summary>
+    /// Resolves which screen the window currently belongs to, using the window
+    /// center point (NOT Cursor.Position). Extracted as internal for testability.
+    /// </summary>
+    internal Screen? ResolveScreenFromWindowRect(RECT rect)
+    {
+        int windowWidth = rect.Right - rect.Left;
+        int windowHeight = rect.Bottom - rect.Top;
+        if (windowWidth <= 0 || windowHeight <= 0)
+            return null;
+
+        int centerX = (rect.Left + rect.Right) / 2;
+        int centerY = (rect.Top + rect.Bottom) / 2;
+        return ScreenFromPointResolver(new System.Drawing.Point(centerX, centerY));
+    }
+
+    private void PositionNearCursorScreen()
     {
         try
         {
@@ -107,40 +226,65 @@ public partial class MonitorPanelWindow : Window
             Screen? screen = Screen.FromPoint(cursorPos);
 
             if (screen == null)
-            {
                 screen = Screen.PrimaryScreen;
-            }
 
             if (screen != null)
             {
-                var workingArea = screen.WorkingArea;
                 var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
-
                 if (hwndSource != null)
                 {
                     IntPtr hwnd = hwndSource.Handle;
-
                     if (GetWindowRect(hwnd, out RECT rect))
                     {
                         int windowWidth = rect.Right - rect.Left;
                         int windowHeight = rect.Bottom - rect.Top;
-
-                        int desiredX = workingArea.Right - windowWidth - 16;
-                        int desiredY = workingArea.Bottom - windowHeight - 16;
-
-                        desiredX = Math.Max(workingArea.Left, desiredX);
-                        desiredY = Math.Max(workingArea.Top, desiredY);
-
-                        SetWindowPos(hwnd, IntPtr.Zero, desiredX, desiredY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+                        PositionWindowToScreenBottomRight(hwnd, screen, windowWidth, windowHeight);
+                        return;
                     }
                 }
             }
         }
         catch
         {
-            Left = System.Windows.Forms.Screen.PrimaryScreen?.WorkingArea.Right - Width - 16 ?? 100;
-            Top = System.Windows.Forms.Screen.PrimaryScreen?.WorkingArea.Bottom - Height - 16 ?? 100;
         }
+
+        // Fallback: use primary screen
+        try
+        {
+            Screen? primaryScreen = Screen.PrimaryScreen;
+            if (primaryScreen == null)
+                return;
+
+            var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
+            if (hwndSource == null)
+                return;
+
+            IntPtr hwnd = hwndSource.Handle;
+            if (!GetWindowRect(hwnd, out RECT rect))
+                return;
+
+            int windowWidth = rect.Right - rect.Left;
+            int windowHeight = rect.Bottom - rect.Top;
+            PositionWindowToScreenBottomRight(hwnd, primaryScreen, windowWidth, windowHeight);
+        }
+        catch
+        {
+        }
+    }
+
+    private void PositionWindowToScreenBottomRight(IntPtr hwnd, Screen screen, int windowWidth, int windowHeight)
+    {
+        var workingArea = screen.WorkingArea;
+        double dpi = DpiHelper.GetDpiForWindow(hwnd);
+        int physicalMargin = (int)Math.Round(DpiHelper.ConvertDipToPhysicalPixels(16, dpi));
+
+        int desiredX = workingArea.Right - windowWidth - physicalMargin;
+        int desiredY = workingArea.Bottom - windowHeight - physicalMargin;
+
+        desiredX = Math.Max(workingArea.Left, desiredX);
+        desiredY = Math.Max(workingArea.Top, desiredY);
+
+        SetWindowPos(hwnd, IntPtr.Zero, desiredX, desiredY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
     }
 
     public void PrepareForShutdown()

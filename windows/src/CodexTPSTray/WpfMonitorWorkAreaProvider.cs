@@ -35,10 +35,14 @@ public class WpfMonitorWorkAreaProvider : IMonitorWorkAreaProvider
 
         foreach (Screen screen in Screen.AllScreens)
         {
+            IntPtr hmonitor = DpiHelper.GetMonitorForPoint(screen.Bounds.Location);
+            var (dpiX, dpiY) = DpiHelper.GetDpiForMonitor(hmonitor);
             infos.Add(new MonitorInfo(
                 DeviceName: screen.DeviceName ?? string.Empty,
                 WorkingArea: ScreenToRect(screen.WorkingArea),
-                IsPrimary: string.Equals(screen.DeviceName, primaryDeviceName, StringComparison.OrdinalIgnoreCase)
+                IsPrimary: string.Equals(screen.DeviceName, primaryDeviceName, StringComparison.OrdinalIgnoreCase),
+                DpiX: dpiX,
+                DpiY: dpiY
             ));
         }
         return infos;

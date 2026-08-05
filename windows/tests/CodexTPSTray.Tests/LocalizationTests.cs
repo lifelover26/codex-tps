@@ -91,7 +91,7 @@ public class LocalizationTests
     [Fact]
     public void GetOverlayThemeDisplayName_System_English()
     {
-        Assert.Equal("System", Localization.GetOverlayThemeDisplayName(OverlayThemePreference.System, Language.English));
+        Assert.Equal("Follow Windows", Localization.GetOverlayThemeDisplayName(OverlayThemePreference.System, Language.English));
     }
 
     [Fact]

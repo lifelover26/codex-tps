@@ -373,6 +373,13 @@ public class TrayIconManager : IDisposable
             OverlayMonitorDeviceName = null
         };
         _settingsStore.TrySave(_currentSettings);
+
+        // Sync the updated settings back to OverlayWindow so its internal state
+        // matches. This is critical for the DPI reposition path: when a DPI change
+        // fires SyncCustomPositionFromWindowRect -> DragCompleted -> this handler,
+        // the OverlayWindow must end up with the same physical coordinates.
+        _overlayWindow?.UpdateSettings(_currentSettings);
+
         UpdateMenuCheckmarks();
     }
 
@@ -560,12 +567,14 @@ public class TrayIconManager : IDisposable
             left, top, width, height, allMonitorInfos, primaryMonitorInfo);
 
         var size = new System.Windows.Size(width, height);
-        var margin = new Thickness(16);
+        Thickness dipMargin = new Thickness(16);
+        Thickness physicalMargin = DpiHelper.ConvertDipMarginToPhysical(dipMargin, targetMonitor.DpiX, targetMonitor.DpiY);
         var (newLeft, newTop) = OverlayPositionCalculator.CalculatePresetPosition(
-            preset, size, targetMonitor.WorkingArea, margin);
+            preset, size, targetMonitor.WorkingArea, physicalMargin);
 
-        _overlayWindow.MoveToPosition(newLeft, newTop);
-
+        // Update settings BEFORE MoveToPosition: SetWindowPos may synchronously
+        // trigger a DPI change message, and the OverlayWindow DPI handler must
+        // read the new preset to re-anchor correctly instead of using stale settings.
         _currentSettings = _currentSettings with
         {
             OverlayLeft = null,
@@ -573,6 +582,12 @@ public class TrayIconManager : IDisposable
             OverlayPosition = preset,
             OverlayMonitorDeviceName = string.IsNullOrEmpty(targetMonitor.DeviceName) ? null : targetMonitor.DeviceName
         };
+
+        // Sync the new preset settings to OverlayWindow before the move.
+        _overlayWindow.UpdateSettings(_currentSettings);
+
+        _overlayWindow.MoveToPosition(newLeft, newTop);
+
         _settingsStore.TrySave(_currentSettings);
         UpdateMenuCheckmarks();
     }

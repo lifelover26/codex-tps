@@ -1,12 +1,31 @@
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
-using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace CodexTPSTray;
+
+/// <summary>
+/// Manages a monotonically increasing generation token for DPI reposition
+/// callbacks. Consecutive DPI events merge: only the last queued callback
+/// has a matching generation. Hiding or closing the window invalidates all
+/// pending callbacks by incrementing the generation.
+/// </summary>
+internal sealed class DpiRepositionGuard
+{
+    private long _generation;
+
+    public long Queue() => Interlocked.Increment(ref _generation);
+
+    public bool IsCurrent(long generation) => Volatile.Read(ref _generation) == generation;
+
+    public void Invalidate() => Interlocked.Increment(ref _generation);
+}
 
 public partial class OverlayWindow : Window
 {
@@ -15,8 +34,12 @@ public partial class OverlayWindow : Window
     private bool _isLocked;
     private bool _isShuttingDown;
     private bool _shutdownPrepared;
+    private bool _isDragging;
     private EffectiveTheme _currentTheme = EffectiveTheme.Light;
     private OverlayOpacityPreference _currentOpacity = OverlayOpacityPreference.Default;
+    private TraySettings? _currentSettings;
+    private HwndSource? _hwndSource;
+    private readonly DpiRepositionGuard _dpiGuard = new();
 
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -96,9 +119,105 @@ public partial class OverlayWindow : Window
         OverlayThemeResources.Apply(Resources, EffectiveTheme.Dark);
         _currentTheme = EffectiveTheme.Dark;
 
+        SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         Closing += OnClosing;
+        IsVisibleChanged += OnIsVisibleChanged;
         MouseLeftButtonDown += OnMouseLeftButtonDown;
+    }
+
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        _hwndSource = PresentationSource.FromVisual(this) as HwndSource;
+        if (_hwndSource != null)
+        {
+            _hwndSource.DpiChanged += OnHwndSourceDpiChanged;
+        }
+    }
+
+    private void OnHwndSourceDpiChanged(object sender, System.Windows.HwndDpiChangedEventArgs e)
+    {
+        // Let WPF handle native DPI layout and re-rendering automatically (PerMonitorV2).
+        // We do NOT set e.Handled or apply ScaleTransform here, which would cause double scaling.
+        if (_isShuttingDown || _isDragging)
+            return;
+
+        long captured = _dpiGuard.Queue();
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            if (!_dpiGuard.IsCurrent(captured))
+                return;
+
+            ExecuteDpiReposition();
+        }));
+    }
+
+    /// <summary>
+    /// Executes the DPI reposition logic. Extracted as an internal method so tests
+    /// can verify behavior without relying on real DPI events or reflection.
+    /// </summary>
+    internal void ExecuteDpiReposition()
+    {
+        if (_isShuttingDown || !IsLoaded || !IsVisible || _isDragging)
+            return;
+
+        ExecuteDpiRepositionCore();
+    }
+
+    /// <summary>
+    /// Core reposition logic without visibility/shutdown guards. Tests call this
+    /// directly to verify preset re-anchoring and custom coordinate sync behavior.
+    /// </summary>
+    internal void ExecuteDpiRepositionCore()
+    {
+        ApplyExtendedStyles();
+        EnsureTopmost();
+
+        if (_currentSettings == null)
+            return;
+
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd == IntPtr.Zero || !_native.GetWindowRect(hwnd, out RECT currentRect))
+            return;
+
+        if (_currentSettings.OverlayPosition.HasValue)
+        {
+            // Preset position: re-anchor to target monitor with new DPI margins
+            int width = currentRect.Right - currentRect.Left;
+            int height = currentRect.Bottom - currentRect.Top;
+            if (width > 0 && height > 0)
+            {
+                var (left, top) = ResolvePosition(_currentSettings, width, height);
+                _native.SetWindowPos(hwnd, IntPtr.Zero, (int)left, (int)top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                EnsureTopmost();
+            }
+        }
+        else
+        {
+            // Custom position: sync final WPF-placed coordinates back to settings after DPI change
+            // to avoid restoring stale physical coordinates on next launch.
+            // Do NOT jump to old OverlayLeft/OverlayTop — let WPF's native DPI placement stand.
+            SyncCustomPositionFromWindowRect(currentRect);
+        }
+    }
+
+    private void SyncCustomPositionFromWindowRect(RECT physicalRect)
+    {
+        // Position storage uses physical screen coordinates (consistent with GetWindowRect,
+        // SetWindowPos, and Screen.WorkingArea from WinForms). Save the final physical
+        // position as-placed by WPF after DPI change so next launch resumes from the correct spot.
+        try
+        {
+            int physicalWidth = physicalRect.Right - physicalRect.Left;
+            int physicalHeight = physicalRect.Bottom - physicalRect.Top;
+            if (physicalWidth <= 0 || physicalHeight <= 0)
+                return;
+
+            DragCompleted?.Invoke(physicalRect.Left, physicalRect.Top);
+        }
+        catch
+        {
+        }
     }
 
     internal void ApplyTheme(EffectiveTheme theme)
@@ -158,12 +277,31 @@ public partial class OverlayWindow : Window
         EnsureTopmost();
     }
 
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        // When window becomes hidden, invalidate any pending DPI reposition so a
+        // queued callback from before the hide cannot reposition the window after
+        // a subsequent Show.
+        if (!(bool)e.NewValue)
+        {
+            _dpiGuard.Invalidate();
+        }
+    }
+
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (!_isShuttingDown)
         {
             e.Cancel = true;
             Hide();
+            return;
+        }
+
+        _dpiGuard.Invalidate();
+        if (_hwndSource != null)
+        {
+            _hwndSource.DpiChanged -= OnHwndSourceDpiChanged;
+            _hwndSource = null;
         }
     }
 
@@ -172,11 +310,20 @@ public partial class OverlayWindow : Window
         if (_isLocked)
             return;
 
-        DragMove();
+        _isDragging = true;
+        try
+        {
+            DragMove();
+        }
+        finally
+        {
+            _isDragging = false;
+        }
 
         IntPtr hwnd = _native.GetHandle(this);
         if (hwnd != IntPtr.Zero && _native.GetWindowRect(hwnd, out RECT rect))
         {
+            // Save physical screen coordinates (consistent with GetWindowRect/SetWindowPos/Screen.WorkingArea).
             DragCompleted?.Invoke(rect.Left, rect.Top);
         }
     }
@@ -246,6 +393,8 @@ public partial class OverlayWindow : Window
         if (_isShuttingDown)
             return;
 
+        _currentSettings = settings;
+
         bool wasLocked = _isLocked;
         _isLocked = settings.OverlayLocked;
 
@@ -282,7 +431,7 @@ public partial class OverlayWindow : Window
     public (double Left, double Top) ResolvePosition(TraySettings settings, double width, double height)
     {
         System.Windows.Size overlaySize = new System.Windows.Size(width, height);
-        Thickness margin = new Thickness(16);
+        Thickness dipMargin = new Thickness(16);
 
         if (settings.OverlayPosition.HasValue)
         {
@@ -309,24 +458,30 @@ public partial class OverlayWindow : Window
                 allMonitorInfos,
                 primaryMonitorInfo);
 
+            Thickness physicalMargin = DpiHelper.ConvertDipMarginToPhysical(dipMargin, targetMonitor.DpiX, targetMonitor.DpiY);
+
             return OverlayPositionCalculator.CalculatePresetPosition(
                 settings.OverlayPosition.Value,
                 overlaySize,
                 targetMonitor.WorkingArea,
-                margin
+                physicalMargin
             );
         }
 
-        var primaryWorkArea2 = _workAreaProvider.GetPrimaryWorkArea();
+        var allMonitorInfosForCustom = _workAreaProvider.GetAllMonitorInfos();
+        MonitorInfo primaryMonitor = allMonitorInfosForCustom.FirstOrDefault(i => i.IsPrimary)
+            ?? new MonitorInfo(string.Empty, _workAreaProvider.GetPrimaryWorkArea(), true);
+
+        Thickness primaryPhysicalMargin = DpiHelper.ConvertDipMarginToPhysical(dipMargin, primaryMonitor.DpiX, primaryMonitor.DpiY);
         var allWorkAreas = _workAreaProvider.GetAllWorkAreas();
 
         return OverlayPositionCalculator.CalculatePosition(
             settings.OverlayLeft,
             settings.OverlayTop,
             overlaySize,
-            primaryWorkArea2,
+            primaryMonitor.WorkingArea,
             allWorkAreas,
-            margin
+            primaryPhysicalMargin
         );
     }
 
