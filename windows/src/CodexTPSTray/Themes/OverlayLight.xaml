@@ -3,6 +3,16 @@
 
     <SolidColorBrush x:Key="OverlayBackgroundBrush" Color="#CCF0F0F0"/>
     <SolidColorBrush x:Key="OverlayPrimaryTextBrush" Color="#1A1A1A"/>
-    <SolidColorBrush x:Key="OverlaySecondaryTextBrush" Color="#333333"/>
+    <SolidColorBrush x:Key="OverlaySecondaryTextBrush" Color="#FF555555"/>
+
+    <SolidColorBrush x:Key="OverlayMenuBackgroundBrush" Color="#FFF5F5F5"/>
+    <SolidColorBrush x:Key="OverlayMenuBorderBrush" Color="#FFD0D0D0"/>
+    <SolidColorBrush x:Key="OverlayMenuItemHighlightBrush" Color="#FF0078D4"/>
+    <SolidColorBrush x:Key="OverlayMenuItemHighlightTextBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="OverlayMenuItemDisabledTextBrush" Color="#FFA0A0A0"/>
+    <SolidColorBrush x:Key="OverlayMenuCheckBackgroundBrush" Color="#FFF5F5F5"/>
+    <SolidColorBrush x:Key="OverlayMenuGlyphBrush" Color="#1A1A1A"/>
+    <SolidColorBrush x:Key="OverlayMenuSubmenuGlyphBrush" Color="#1A1A1A"/>
+    <SolidColorBrush x:Key="OverlaySeparatorBrush" Color="#FFD0D0D0"/>
 
 </ResourceDictionary>

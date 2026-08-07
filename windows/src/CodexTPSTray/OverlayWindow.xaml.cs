@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -7,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using WpfMenuItem = System.Windows.Controls.MenuItem;
 
 namespace CodexTPSTray;
 
@@ -41,6 +43,11 @@ public partial class OverlayWindow : Window
     private HwndSource? _hwndSource;
     private readonly DpiRepositionGuard _dpiGuard = new();
     private readonly DpiRepositionGuard _sizeNormalizationGuard = new();
+    private IOverlayMenuCommandHandler? _menuCommandHandler;
+    private IOverlayMenuStateProvider? _menuStateProvider;
+    private readonly Dictionary<OverlayPositionPreset, WpfMenuItem> _positionMenuItems = new();
+    private readonly Dictionary<OverlayOpacityPreference, WpfMenuItem> _opacityMenuItems = new();
+    private readonly Dictionary<OverlayThemePreference, WpfMenuItem> _themeMenuItems = new();
 
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -120,11 +127,198 @@ public partial class OverlayWindow : Window
         OverlayThemeResources.Apply(Resources, EffectiveTheme.Dark);
         _currentTheme = EffectiveTheme.Dark;
 
+        InitializeMenuItemMappings();
+
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         Closing += OnClosing;
         IsVisibleChanged += OnIsVisibleChanged;
         MouseLeftButtonDown += OnMouseLeftButtonDown;
+        MouseRightButtonDown += OnMouseRightButtonDown;
+        RootBorder.ContextMenuOpening += OnContextMenuOpening;
+    }
+
+    private void OnContextMenuOpening(object sender, System.Windows.Controls.ContextMenuEventArgs e)
+    {
+        if (_isLocked || _isShuttingDown)
+        {
+            e.Handled = true;
+            OverlayContextMenu.IsOpen = false;
+        }
+    }
+
+    private void InitializeMenuItemMappings()
+    {
+        _positionMenuItems[OverlayPositionPreset.TopLeft] = PositionTopLeft;
+        _positionMenuItems[OverlayPositionPreset.TopRight] = PositionTopRight;
+        _positionMenuItems[OverlayPositionPreset.MiddleLeft] = PositionMiddleLeft;
+        _positionMenuItems[OverlayPositionPreset.MiddleRight] = PositionMiddleRight;
+        _positionMenuItems[OverlayPositionPreset.BottomLeft] = PositionBottomLeft;
+        _positionMenuItems[OverlayPositionPreset.BottomRight] = PositionBottomRight;
+
+        _opacityMenuItems[OverlayOpacityPreference.Default] = OpacityDefault;
+        _opacityMenuItems[OverlayOpacityPreference.Percent40] = Opacity40;
+        _opacityMenuItems[OverlayOpacityPreference.Percent55] = Opacity55;
+        _opacityMenuItems[OverlayOpacityPreference.Percent70] = Opacity70;
+        _opacityMenuItems[OverlayOpacityPreference.Percent85] = Opacity85;
+        _opacityMenuItems[OverlayOpacityPreference.Opaque] = OpacityOpaque;
+
+        _themeMenuItems[OverlayThemePreference.FollowApplication] = ThemeFollowApp;
+        _themeMenuItems[OverlayThemePreference.System] = ThemeSystem;
+        _themeMenuItems[OverlayThemePreference.Light] = ThemeLight;
+        _themeMenuItems[OverlayThemePreference.Dark] = ThemeDark;
+    }
+
+    internal void SetOverlayMenuCommandHandler(IOverlayMenuCommandHandler handler)
+    {
+        _menuCommandHandler = handler;
+    }
+
+    internal void SetOverlayMenuStateProvider(IOverlayMenuStateProvider provider)
+    {
+        _menuStateProvider = provider;
+    }
+
+    private void OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_isLocked || _isShuttingDown)
+        {
+            return;
+        }
+
+        UpdateContextMenuState();
+    }
+
+    internal void ApplyMenuTheme(EffectiveTheme theme)
+    {
+        // Menu resources are already applied by OverlayThemeResources in ApplyTheme()
+    }
+
+    internal void UpdateContextMenuState()
+    {
+        if (_menuStateProvider == null)
+            return;
+
+        var settings = _menuStateProvider.CurrentSettings;
+        bool isVisible = _menuStateProvider.IsOverlayVisible;
+
+        OverlayContextMenu.IsEnabled = !_isLocked && !_isShuttingDown;
+
+        ShowOverlayMenuItem.IsChecked = settings.OverlayEnabled;
+        LockOverlayMenuItem.IsChecked = settings.OverlayLocked;
+
+        foreach (var preset in OverlayMenuDefinition.PositionPresets)
+        {
+            var item = _positionMenuItems[preset];
+            item.IsChecked = preset == settings.OverlayPosition;
+            item.IsEnabled = isVisible;
+        }
+
+        foreach (var opacity in OverlayMenuDefinition.OpacityPreferences)
+        {
+            _opacityMenuItems[opacity].IsChecked = opacity == settings.OverlayOpacity;
+        }
+
+        var overlayTheme = settings.OverlayTheme;
+        foreach (var theme in OverlayMenuDefinition.ThemePreferences)
+        {
+            _themeMenuItems[theme].IsChecked = theme == overlayTheme;
+        }
+
+        UpdateMenuLocalization(settings.Language);
+    }
+
+    private void UpdateMenuLocalization(Language language)
+    {
+        ShowOverlayMenuItem.Header = Localization.ShowOverlayMenu(language);
+        LockOverlayMenuItem.Header = Localization.LockOverlayMenu(language);
+        PositionSubmenu.Header = Localization.PositionMenu(language);
+        OpacitySubmenu.Header = Localization.BackgroundOpacityMenu(language);
+        ThemeSubmenu.Header = Localization.OverlayThemeMenu(language);
+
+        foreach (var preset in OverlayMenuDefinition.PositionPresets)
+        {
+            _positionMenuItems[preset].Header = OverlayMenuDefinition.GetPositionText(preset, language);
+        }
+
+        foreach (var opacity in OverlayMenuDefinition.OpacityPreferences)
+        {
+            _opacityMenuItems[opacity].Header = OverlayMenuDefinition.GetOpacityText(opacity, language);
+        }
+
+        foreach (var theme in OverlayMenuDefinition.ThemePreferences)
+        {
+            _themeMenuItems[theme].Header = OverlayMenuDefinition.GetThemeText(theme, language);
+        }
+    }
+
+    private void OnShowOverlayClicked(object sender, RoutedEventArgs e)
+    {
+        if (_menuCommandHandler == null || _isLocked || _isShuttingDown)
+            return;
+
+        OverlayContextMenu.IsOpen = false;
+        _menuCommandHandler.ToggleOverlay(ShowOverlayMenuItem.IsChecked);
+    }
+
+    private void OnLockOverlayClicked(object sender, RoutedEventArgs e)
+    {
+        if (_menuCommandHandler == null || _isShuttingDown)
+            return;
+
+        OverlayContextMenu.IsOpen = false;
+        _menuCommandHandler.ToggleLock(LockOverlayMenuItem.IsChecked);
+    }
+
+    private void OnPositionClicked(object sender, RoutedEventArgs e)
+    {
+        if (_menuCommandHandler == null || _isLocked || _isShuttingDown || sender is not WpfMenuItem item)
+            return;
+
+        OverlayContextMenu.IsOpen = false;
+
+        foreach (var kvp in _positionMenuItems)
+        {
+            if (kvp.Value == item)
+            {
+                _menuCommandHandler.SelectPosition(kvp.Key);
+                return;
+            }
+        }
+    }
+
+    private void OnOpacityClicked(object sender, RoutedEventArgs e)
+    {
+        if (_menuCommandHandler == null || _isLocked || _isShuttingDown || sender is not WpfMenuItem item)
+            return;
+
+        OverlayContextMenu.IsOpen = false;
+
+        foreach (var kvp in _opacityMenuItems)
+        {
+            if (kvp.Value == item)
+            {
+                _menuCommandHandler.SelectOpacity(kvp.Key);
+                return;
+            }
+        }
+    }
+
+    private void OnThemeClicked(object sender, RoutedEventArgs e)
+    {
+        if (_menuCommandHandler == null || _isLocked || _isShuttingDown || sender is not WpfMenuItem item)
+            return;
+
+        OverlayContextMenu.IsOpen = false;
+
+        foreach (var kvp in _themeMenuItems)
+        {
+            if (kvp.Value == item)
+            {
+                _menuCommandHandler.SelectTheme(kvp.Key);
+                return;
+            }
+        }
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -417,6 +611,12 @@ public partial class OverlayWindow : Window
         {
             ApplyExtendedStyles();
             EnsureTopmost();
+
+            OverlayContextMenu.IsEnabled = !_isLocked;
+            if (_isLocked)
+            {
+                OverlayContextMenu.IsOpen = false;
+            }
         }
 
         _currentOpacity = settings.OverlayOpacity;

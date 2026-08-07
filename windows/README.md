@@ -4,6 +4,19 @@ A privacy-first Windows 11 tray monitor for local Codex token throughput.
 The release is a self-contained Portable ZIP: extract it and run the executable;
 no installer or separately installed .NET runtime is required.
 
+**What's new in v0.3.5:**
+
+- Right-clicking the desktop overlay while unlocked now opens the full Overlay
+  settings menu directly, so common overlay options no longer require opening
+  the tray menu first.
+- Fixes dark-theme overlay menu check column, submenu background, and text
+  contrast so the overlay context menu is legible in dark mode.
+- The tray menu and the overlay menu now share a unified light/dark theme,
+  hover, checkmark, submenu, and compact layout, giving both menus a
+  consistent appearance.
+- Dynamically added WSL data source menu items (such as the detecting and
+  no-WSL placeholder items) also use the unified style.
+
 **What's new in v0.3.4:**
 
 - Adds Windows PerMonitorV2 DPI awareness. The detailed panel and desktop
@@ -85,7 +98,7 @@ no installer or separately installed .NET runtime is required.
 
 ### Install and Run
 
-1. Download `Codex-TPS-Windows-x64-Portable-0.3.4.zip` and its `.sha256` file.
+1. Download `Codex-TPS-Windows-x64-Portable-0.3.5.zip` and its `.sha256` file.
 2. Verify the checksum before extracting the ZIP.
 3. Extract the ZIP to a stable writable directory, for example:
 
@@ -234,7 +247,7 @@ Existing settings remain in `%LOCALAPPDATA%\CodexTPS`.
 Do not run or extract the package if verification fails.
 
 ```powershell
-$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.3.4.zip"
+$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.3.5.zip"
 $checksumPath = "$zipPath.sha256"
 
 $expectedHash = (Get-Content $checksumPath -Raw).Split('  ')[0].Trim()
@@ -278,14 +291,14 @@ dotnet format .\windows\CodexTPS.slnx --verify-no-changes
 Create the x64 Portable release:
 
 ```powershell
-.\windows\scripts\New-Release.ps1 -Version 0.3.4
+.\windows\scripts\New-Release.ps1 -Version 0.3.5
 ```
 
 The script creates:
 
 ```text
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.4.zip
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.4.zip.sha256
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.5.zip
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.5.zip.sha256
 ```
 
 The ZIP contains exactly:
@@ -299,6 +312,16 @@ The ZIP contains exactly:
 Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 token
 吞吐率的 Windows 11 托盘工具。发布包为自包含 Portable ZIP：解压后即可
 运行，不需要安装程序，也不需要单独安装 .NET 运行时。
+
+**v0.3.5 更新内容：**
+
+- 解锁状态下右键桌面悬浮窗可直接打开完整 Overlay 设置菜单，常用悬浮窗选项
+  无需再先打开托盘菜单。
+- 修复深色主题下悬浮窗菜单复选列、子菜单背景和文字对比度问题，深色模式下
+  悬浮窗右键菜单清晰可读。
+- 托盘菜单与悬浮窗菜单统一深浅主题、悬停、勾选、子菜单和紧凑布局，两个菜单
+  外观保持一致。
+- 动态加入的 WSL 数据源菜单项（如正在检测和未找到 WSL 占位项）也使用统一样式。
 
 **v0.3.4 更新内容：**
 
@@ -359,7 +382,7 @@ Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 tok
 
 ### 安装与启动
 
-1. 下载 `Codex-TPS-Windows-x64-Portable-0.3.4.zip` 和对应的 `.sha256`。
+1. 下载 `Codex-TPS-Windows-x64-Portable-0.3.5.zip` 和对应的 `.sha256`。
 2. 校验 SHA-256 后再解压。
 3. 解压到稳定且可写的目录，例如 `%USERPROFILE%\Apps\CodexTPS`。
 4. 运行 `CodexTPSTray.exe`。
@@ -475,7 +498,7 @@ Alt+Tab 中，普通截图和录屏会包含它。
 dotnet build .\windows\CodexTPS.slnx
 dotnet test .\windows\CodexTPS.slnx
 dotnet format .\windows\CodexTPS.slnx --verify-no-changes
-.\windows\scripts\New-Release.ps1 -Version 0.3.4
+.\windows\scripts\New-Release.ps1 -Version 0.3.5
 ```
 
 发布脚本会生成 Portable ZIP 和对应的 SHA-256 文件。

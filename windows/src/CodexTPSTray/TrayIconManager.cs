@@ -9,6 +9,21 @@ using CodexTPSCore;
 
 namespace CodexTPSTray;
 
+internal interface IOverlayMenuCommandHandler
+{
+    void ToggleOverlay(bool enabled);
+    void ToggleLock(bool locked);
+    void SelectPosition(OverlayPositionPreset preset);
+    void SelectOpacity(OverlayOpacityPreference opacity);
+    void SelectTheme(OverlayThemePreference theme);
+}
+
+internal interface IOverlayMenuStateProvider
+{
+    TraySettings CurrentSettings { get; }
+    bool IsOverlayVisible { get; }
+}
+
 public class TrayIconManager : IDisposable
 {
     private readonly NotifyIcon _notifyIcon;
@@ -33,6 +48,7 @@ public class TrayIconManager : IDisposable
     private ThemeApplicationTarget? _themeTarget;
     private readonly IWinFormsThemeApplier _winFormsThemeApplier;
     private ContextMenuStrip? _contextMenu;
+    private TrayMenuRenderer? _trayMenuRenderer;
     private SystemThemeChangeCoordinator? _systemThemeChangeCoordinator;
     private OverlayTopmostRecoveryCoordinator? _overlayRecoveryCoordinator;
 
@@ -177,7 +193,10 @@ public class TrayIconManager : IDisposable
     internal SemaphoreSlim SwitchSemaphore => _switchSemaphore;
     internal bool WindowsDataSourceMenuItemChecked => _windowsDataSourceMenuItem.Checked;
     internal ToolStripMenuItem WindowsDataSourceMenuItem => _windowsDataSourceMenuItem;
+    internal ToolStripMenuItem LockOverlayMenuItemForTest => _lockOverlayMenuItem;
+    internal ToolStripMenuItem ShowOverlayMenuItemForTest => _showOverlayMenuItem;
     internal ContextMenuStrip? ContextMenuStrip => _contextMenu;
+    internal TrayMenuRenderer? TrayMenuRendererForTest => _trayMenuRenderer;
     internal Task? DataSourceDiscoveryTask { get; private set; }
     internal Task? LastDataSourceSwitchTask { get; private set; }
     internal Action? OnSwitchRejected { get; set; }
@@ -245,6 +264,8 @@ public class TrayIconManager : IDisposable
     {
         _overlayWindow = new OverlayWindow(_workAreaProvider);
         _overlayWindow.DragCompleted += OnOverlayDragCompleted;
+        _overlayWindow.SetOverlayMenuCommandHandler(new OverlayMenuCommandHandler(this));
+        _overlayWindow.SetOverlayMenuStateProvider(new OverlayMenuStateProvider(this));
 
         _themeCoordinator?.Apply(_currentSettings);
 
@@ -253,6 +274,79 @@ public class TrayIconManager : IDisposable
         _overlayLifecycle = new OverlayLifecycleCoordinator(windowAdapter, dispatcher);
 
         _overlayLifecycle.Initialize(_currentSettings);
+        UpdateOverlayContextMenu();
+    }
+
+    private sealed class OverlayMenuCommandHandler : IOverlayMenuCommandHandler
+    {
+        private readonly TrayIconManager _manager;
+
+        public OverlayMenuCommandHandler(TrayIconManager manager) => _manager = manager;
+
+        public void ToggleOverlay(bool enabled) => _manager.ToggleOverlayEnabled(enabled);
+        public void ToggleLock(bool locked) => _manager.ToggleOverlayLocked(locked);
+        public void SelectPosition(OverlayPositionPreset preset) => _manager.SelectOverlayPosition(preset);
+        public void SelectOpacity(OverlayOpacityPreference opacity) => _manager.SelectOverlayOpacity(opacity);
+        public void SelectTheme(OverlayThemePreference theme) => _manager.SelectOverlayTheme(theme);
+    }
+
+    private sealed class OverlayMenuStateProvider : IOverlayMenuStateProvider
+    {
+        private readonly TrayIconManager _manager;
+
+        public OverlayMenuStateProvider(TrayIconManager manager) => _manager = manager;
+
+        public TraySettings CurrentSettings => _manager._currentSettings;
+        public bool IsOverlayVisible => _manager._overlayWindow?.IsVisible ?? false;
+    }
+
+    private void ToggleOverlayEnabled(bool enabled)
+    {
+        if (_isShuttingDown)
+            return;
+
+        _currentSettings = _currentSettings with { OverlayEnabled = enabled };
+        _settingsStore.TrySave(_currentSettings);
+
+        _overlayLifecycle?.SetEnabled(_currentSettings);
+        UpdateMenuCheckmarks();
+        UpdateOverlayContextMenu();
+    }
+
+    private void ToggleOverlayLocked(bool locked)
+    {
+        if (_isShuttingDown)
+            return;
+
+        _currentSettings = _currentSettings with { OverlayLocked = locked };
+        _settingsStore.TrySave(_currentSettings);
+
+        _overlayWindow?.UpdateSettings(_currentSettings);
+        UpdateMenuCheckmarks();
+        UpdateOverlayContextMenu();
+    }
+
+    private void SelectOverlayPosition(OverlayPositionPreset preset)
+    {
+        OnOverlayPositionPresetSelected(preset);
+        UpdateOverlayContextMenu();
+    }
+
+    private void SelectOverlayOpacity(OverlayOpacityPreference preference)
+    {
+        OnOverlayOpacitySelected(preference);
+        UpdateOverlayContextMenu();
+    }
+
+    private void SelectOverlayTheme(OverlayThemePreference preference)
+    {
+        OnOverlayThemeSelected(preference);
+        UpdateOverlayContextMenu();
+    }
+
+    private void UpdateOverlayContextMenu()
+    {
+        _overlayWindow?.UpdateContextMenuState();
     }
 
     private void InitializeSystemThemeListener()
@@ -328,6 +422,19 @@ public class TrayIconManager : IDisposable
         {
             _manager._winFormsThemeApplier.TryApply(theme);
 
+            if (_manager._trayMenuRenderer != null)
+            {
+                _manager._trayMenuRenderer.TryUpdateTheme(theme);
+
+                // Re-apply layout configuration to root and all nested menus so
+                // newly created DropDowns (e.g. WSL items added after Start) get
+                // the renderer and compact settings.
+                if (_manager._contextMenu != null)
+                {
+                    _manager._trayMenuRenderer.ApplyTo(_manager._contextMenu);
+                }
+            }
+
             if (_manager._contextMenu != null)
             {
                 _manager._contextMenu.Refresh();
@@ -344,6 +451,7 @@ public class TrayIconManager : IDisposable
             if (_manager._overlayWindow != null)
             {
                 _manager._overlayWindow.ApplyTheme(theme);
+                _manager._overlayWindow.ApplyMenuTheme(theme);
             }
         }
     }
@@ -386,6 +494,10 @@ public class TrayIconManager : IDisposable
     private void InitializeContextMenu()
     {
         _contextMenu = new ContextMenuStrip();
+
+        var resolvedTheme = _themeCoordinator?.CurrentApplicationTheme ?? EffectiveTheme.Light;
+        _trayMenuRenderer = new TrayMenuRenderer(resolvedTheme);
+        _contextMenu.Font = new System.Drawing.Font("Microsoft YaHei UI", 9F);
 
         _metricWindowSubmenu.Text = Localization.MetricWindowMenu(_currentSettings.Language);
         foreach (MetricWindow window in Enum.GetValues<MetricWindow>())
@@ -438,9 +550,9 @@ public class TrayIconManager : IDisposable
         _overlaySubmenu.DropDownItems.Add(new ToolStripSeparator());
 
         _overlayPositionSubmenu.Text = Localization.PositionMenu(_currentSettings.Language);
-        foreach (OverlayPositionPreset preset in Enum.GetValues<OverlayPositionPreset>())
+        foreach (var preset in OverlayMenuDefinition.PositionPresets)
         {
-            var item = new ToolStripMenuItem(Localization.GetPositionPresetDisplayName(preset, _currentSettings.Language));
+            var item = new ToolStripMenuItem(OverlayMenuDefinition.GetPositionText(preset, _currentSettings.Language));
             item.Click += (sender, e) => OnOverlayPositionPresetSelected(preset);
             _overlayPositionMenuItems[preset] = item;
             _overlayPositionSubmenu.DropDownItems.Add(item);
@@ -449,9 +561,9 @@ public class TrayIconManager : IDisposable
         _overlaySubmenu.DropDownItems.Add(_overlayPositionSubmenu);
 
         _overlayOpacitySubmenu.Text = Localization.BackgroundOpacityMenu(_currentSettings.Language);
-        foreach (OverlayOpacityPreference preference in Enum.GetValues<OverlayOpacityPreference>())
+        foreach (var preference in OverlayMenuDefinition.OpacityPreferences)
         {
-            var item = new ToolStripMenuItem(Localization.GetOverlayOpacityDisplayName(preference, _currentSettings.Language));
+            var item = new ToolStripMenuItem(OverlayMenuDefinition.GetOpacityText(preference, _currentSettings.Language));
             item.Click += (sender, e) => OnOverlayOpacitySelected(preference);
             _overlayOpacityMenuItems[preference] = item;
             _overlayOpacitySubmenu.DropDownItems.Add(item);
@@ -459,9 +571,9 @@ public class TrayIconManager : IDisposable
         _overlaySubmenu.DropDownItems.Add(_overlayOpacitySubmenu);
 
         _overlayThemeSubmenu.Text = Localization.OverlayThemeMenu(_currentSettings.Language);
-        foreach (OverlayThemePreference preference in Enum.GetValues<OverlayThemePreference>())
+        foreach (var preference in OverlayMenuDefinition.ThemePreferences)
         {
-            var item = new ToolStripMenuItem(Localization.GetOverlayThemeDisplayName(preference, _currentSettings.Language));
+            var item = new ToolStripMenuItem(OverlayMenuDefinition.GetThemeText(preference, _currentSettings.Language));
             item.Click += (sender, e) => OnOverlayThemeSelected(preference);
             _overlayThemeMenuItems[preference] = item;
             _overlayThemeSubmenu.DropDownItems.Add(item);
@@ -504,6 +616,10 @@ public class TrayIconManager : IDisposable
         _exitMenuItem.Click += OnExitClicked;
         _contextMenu.Items.Add(_exitMenuItem);
 
+        // Apply renderer and compact layout to the root menu and all static
+        // nested DropDowns after all items have been created.
+        _trayMenuRenderer.ApplyTo(_contextMenu);
+
         _notifyIcon.ContextMenuStrip = _contextMenu;
 
         UpdateMenuCheckmarks();
@@ -515,11 +631,7 @@ public class TrayIconManager : IDisposable
             return;
 
         bool enabled = _showOverlayMenuItem.Checked;
-        _currentSettings = _currentSettings with { OverlayEnabled = enabled };
-        _settingsStore.TrySave(_currentSettings);
-
-        _overlayLifecycle?.SetEnabled(_currentSettings);
-        UpdateMenuCheckmarks();
+        ToggleOverlayEnabled(enabled);
     }
 
     private void OnLockOverlayClicked(object? sender, EventArgs e)
@@ -528,10 +640,7 @@ public class TrayIconManager : IDisposable
             return;
 
         bool locked = _lockOverlayMenuItem.Checked;
-        _currentSettings = _currentSettings with { OverlayLocked = locked };
-        _settingsStore.TrySave(_currentSettings);
-
-        _overlayWindow?.UpdateSettings(_currentSettings);
+        ToggleOverlayLocked(locked);
     }
 
     private void OnOverlayPositionPresetSelected(OverlayPositionPreset preset)
@@ -702,6 +811,7 @@ public class TrayIconManager : IDisposable
         if (language == _currentSettings.Language)
         {
             UpdateMenuCheckmarks();
+            UpdateOverlayContextMenu();
             return;
         }
 
@@ -714,6 +824,7 @@ public class TrayIconManager : IDisposable
         _overlayWindow?.UpdateSettings(_currentSettings);
 
         UpdateOverlayContent();
+        UpdateOverlayContextMenu();
 
         if (_latestSnapshot.HasValue)
         {
@@ -776,6 +887,7 @@ public class TrayIconManager : IDisposable
                 {
                     Enabled = false
                 };
+                _trayMenuRenderer?.ConfigureDynamicItem(detectingMenuItem);
                 _dataSourceSubmenu.DropDownItems.Add(detectingMenuItem);
             });
 
@@ -854,6 +966,7 @@ public class TrayIconManager : IDisposable
             {
                 Enabled = false
             };
+            _trayMenuRenderer?.ConfigureDynamicItem(noWslMenuItem);
             _dataSourceSubmenu.DropDownItems.Add(noWslMenuItem);
             UpdateDataSourceMenuCheckmarks();
             return;
@@ -864,6 +977,7 @@ public class TrayIconManager : IDisposable
             var item = new ToolStripMenuItem(source.DisplayName);
             item.Tag = source.Selection.WslDistributionName;
             item.Click += OnWslDataSourceClicked;
+            _trayMenuRenderer?.ConfigureDynamicItem(item);
             _wslDataSourceMenuItems[source.Selection.WslDistributionName!] = item;
             _dataSourceSubmenu.DropDownItems.Add(item);
         }
@@ -873,6 +987,7 @@ public class TrayIconManager : IDisposable
             var item = new ToolStripMenuItem($"WSL: {savedWslDistro}");
             item.Tag = savedWslDistro;
             item.Click += OnWslDataSourceClicked;
+            _trayMenuRenderer?.ConfigureDynamicItem(item);
             _wslDataSourceMenuItems[savedWslDistro!] = item;
             _dataSourceSubmenu.DropDownItems.Add(item);
         }

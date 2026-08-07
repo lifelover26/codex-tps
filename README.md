@@ -39,20 +39,12 @@ Codex TPS for Windows reads the usage events already written to local Codex
 session logs and turns them into an at-a-glance throughput display. It does not
 require an API key and does not upload conversation data.
 
-**What's new in v0.3.4:** Adds Windows PerMonitorV2 DPI awareness. The detailed
-panel and desktop overlay re-render at the correct scale when moved between
-monitors with different scaling percentages, without restarting to recover
-sharpness. Overlay position presets now compute margins using the target
-monitor's DPI and re-anchor after a DPI change; custom drag positions keep
-their custom-coordinate semantics and sync the final physical coordinates back
-to settings. On DPI changes, the metrics panel repositions on the monitor the
-window is currently on, rather than jumping to the monitor that contains the
-cursor. The overlay theme menu option "System" is renamed to "Follow Windows"
-in English; the underlying setting enumeration and persisted JSON value are
-unchanged, so existing settings remain compatible. WPF natively handles
-per-monitor scaling; no additional ScaleTransform is applied, avoiding double
-scaling. This targets normal desktop windows; it does not override the UAC
-secure desktop, exclusive fullscreen programs, or other forced-topmost windows.
+**What's new in v0.3.5:** Right-clicking the desktop overlay while unlocked
+now opens the full Overlay settings menu directly. Fixes dark-theme overlay
+menu check column, submenu background, and text contrast. The tray menu and
+overlay menu now share a unified light/dark theme, hover, checkmark, submenu,
+and compact layout. Dynamically added WSL data source menu items also use the
+unified style.
 
 ### Download
 
@@ -150,15 +142,10 @@ Codex TPS for Windows 是一款 Windows 11 托盘工具。它读取 Codex 已写
 本机的会话用量记录，显示不同时间窗口内的 token 吞吐率。程序本身不需要
 API Key，也不会上传对话内容。
 
-**v0.3.4 更新：** 新增 Windows PerMonitorV2 DPI 感知。详细面板与桌面悬浮窗
-在不同缩放比例显示器之间移动时会按新 DPI 重新渲染，无需重启即可恢复清晰度。
-悬浮窗位置预设改用目标显示器的 DPI 计算边距，DPI 变化后仍能正确锚定；自定义
-拖动位置继续保持自定义坐标语义，并将最终物理坐标同步回设置。DPI 变化时，详细
-面板会基于窗口当前所在显示器重新定位，不会跳到鼠标所在显示器。悬浮窗英文主题
-菜单中的 "System" 改为 "Follow Windows"；原有设置枚举与持久化 JSON 值不变，
-已有设置保持兼容。WPF 原生处理 PerMonitor 缩放，本次不额外应用 ScaleTransform，
-避免双重缩放。上述行为针对普通桌面窗口，不覆盖 UAC 安全桌面、独占全屏程序或
-其他强制置顶窗口。
+**v0.3.5 更新：** 解锁状态下右键桌面悬浮窗可直接打开完整 Overlay 设置菜单。
+修复深色主题下悬浮窗菜单复选列、子菜单背景和文字对比度问题。托盘菜单与悬浮窗
+菜单统一深浅主题、悬停、勾选、子菜单和紧凑布局。动态 WSL 数据源菜单项也使用
+统一样式。
 
 ### 下载与运行
 

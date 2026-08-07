@@ -15,10 +15,167 @@
         Focusable="False"
         FontFamily="Microsoft YaHei UI"
         TextOptions.TextFormattingMode="Display">
+    <Window.Resources>
+        <!-- Explicit ContextMenu ControlTemplate: no reliance on system defaults -->
+        <ControlTemplate x:Key="OverlayContextMenuTemplate" TargetType="ContextMenu">
+            <Border Background="{DynamicResource OverlayMenuBackgroundBrush}"
+                    BorderBrush="{DynamicResource OverlayMenuBorderBrush}"
+                    BorderThickness="1"
+                    Padding="1"
+                    SnapsToDevicePixels="True"
+                    Grid.IsSharedSizeScope="True">
+                <ItemsPresenter/>
+            </Border>
+        </ControlTemplate>
+
+        <!-- Explicit MenuItem ControlTemplate: handles check column, text, arrow, and submenu popup -->
+        <ControlTemplate x:Key="OverlayMenuItemTemplate" TargetType="MenuItem">
+            <Border Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    SnapsToDevicePixels="True">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="20" SharedSizeGroup="CheckColumn"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="20" SharedSizeGroup="ArrowColumn"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Check column: transparent so ContextMenu background shows through -->
+                    <Border Grid.Column="0" Background="Transparent">
+                        <Path x:Name="CheckGlyph"
+                              Data="M0,2.5 L3.5,6 L8,0.5"
+                              Stroke="{DynamicResource OverlayMenuGlyphBrush}"
+                              StrokeThickness="1.5"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Visibility="Collapsed"/>
+                    </Border>
+
+                    <!-- Text content -->
+                    <ContentPresenter Grid.Column="1"
+                                      ContentSource="Header"
+                                      RecognizesAccessKey="True"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="Left"
+                                      Margin="{TemplateBinding Padding}"/>
+
+                    <!-- Submenu arrow column -->
+                    <Border Grid.Column="2" Background="Transparent">
+                        <Path x:Name="ArrowGlyph"
+                              Data="M2,0 L6,4 L2,8"
+                              Stroke="{DynamicResource OverlayMenuSubmenuGlyphBrush}"
+                              StrokeThickness="1.5"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Visibility="Collapsed"/>
+                    </Border>
+
+                    <!-- Submenu popup with explicit dark/light background -->
+                    <Popup x:Name="PART_Popup"
+                           Grid.Column="0" Grid.ColumnSpan="3"
+                           IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                           Placement="Right"
+                           HorizontalOffset="-2"
+                           AllowsTransparency="True"
+                           Focusable="False"
+                           PopupAnimation="Fade">
+                        <Border Background="{DynamicResource OverlayMenuBackgroundBrush}"
+                                BorderBrush="{DynamicResource OverlayMenuBorderBrush}"
+                                BorderThickness="1"
+                                Padding="1"
+                                SnapsToDevicePixels="True"
+                                Grid.IsSharedSizeScope="True">
+                            <ItemsPresenter/>
+                        </Border>
+                    </Popup>
+                </Grid>
+            </Border>
+
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible"/>
+                </Trigger>
+                <Trigger Property="HasItems" Value="True">
+                    <Setter TargetName="ArrowGlyph" Property="Visibility" Value="Visible"/>
+                </Trigger>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource OverlayMenuItemHighlightBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource OverlayMenuItemHighlightTextBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource OverlayMenuItemDisabledTextBrush}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- Separator template -->
+        <ControlTemplate x:Key="OverlaySeparatorTemplate" TargetType="Separator">
+            <Border Height="1"
+                    Background="{DynamicResource OverlaySeparatorBrush}"
+                    SnapsToDevicePixels="True"/>
+        </ControlTemplate>
+
+        <Style x:Key="OverlayMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Template" Value="{StaticResource OverlayMenuItemTemplate}"/>
+            <Setter Property="Foreground" Value="{DynamicResource OverlayPrimaryTextBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+
+        <Style TargetType="Separator">
+            <Setter Property="Template" Value="{StaticResource OverlaySeparatorTemplate}"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Height" Value="1"/>
+        </Style>
+
+        <Style x:Key="OverlayContextMenuStyle" TargetType="ContextMenu">
+            <Setter Property="Template" Value="{StaticResource OverlayContextMenuTemplate}"/>
+            <Setter Property="Background" Value="{DynamicResource OverlayMenuBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource OverlayMenuBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="1"/>
+            <Setter Property="FontFamily" Value="Microsoft YaHei UI"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="UseLayoutRounding" Value="True"/>
+        </Style>
+    </Window.Resources>
     <Border x:Name="RootBorder"
             Background="{DynamicResource OverlayBackgroundBrush}"
             CornerRadius="8"
             Padding="8,8">
+        <Border.ContextMenu>
+            <ContextMenu x:Name="OverlayContextMenu" Style="{StaticResource OverlayContextMenuStyle}">
+                <MenuItem x:Name="ShowOverlayMenuItem" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnShowOverlayClicked"/>
+                <MenuItem x:Name="LockOverlayMenuItem" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnLockOverlayClicked"/>
+                <Separator/>
+                <MenuItem x:Name="PositionSubmenu" Style="{StaticResource OverlayMenuItemStyle}">
+                    <MenuItem x:Name="PositionTopLeft" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                    <MenuItem x:Name="PositionTopRight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                    <MenuItem x:Name="PositionMiddleLeft" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                    <MenuItem x:Name="PositionMiddleRight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                    <MenuItem x:Name="PositionBottomLeft" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                    <MenuItem x:Name="PositionBottomRight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                </MenuItem>
+                <MenuItem x:Name="OpacitySubmenu" Style="{StaticResource OverlayMenuItemStyle}">
+                    <MenuItem x:Name="OpacityDefault" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnOpacityClicked"/>
+                    <MenuItem x:Name="Opacity40" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnOpacityClicked"/>
+                    <MenuItem x:Name="Opacity55" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnOpacityClicked"/>
+                    <MenuItem x:Name="Opacity70" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnOpacityClicked"/>
+                    <MenuItem x:Name="Opacity85" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnOpacityClicked"/>
+                    <MenuItem x:Name="OpacityOpaque" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnOpacityClicked"/>
+                </MenuItem>
+                <MenuItem x:Name="ThemeSubmenu" Style="{StaticResource OverlayMenuItemStyle}">
+                    <MenuItem x:Name="ThemeFollowApp" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
+                    <MenuItem x:Name="ThemeSystem" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
+                    <MenuItem x:Name="ThemeLight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
+                    <MenuItem x:Name="ThemeDark" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
+                </MenuItem>
+            </ContextMenu>
+        </Border.ContextMenu>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="20"/>
