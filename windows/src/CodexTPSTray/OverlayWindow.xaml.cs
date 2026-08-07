@@ -40,6 +40,7 @@ public partial class OverlayWindow : Window
     private TraySettings? _currentSettings;
     private HwndSource? _hwndSource;
     private readonly DpiRepositionGuard _dpiGuard = new();
+    private readonly DpiRepositionGuard _sizeNormalizationGuard = new();
 
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -143,7 +144,7 @@ public partial class OverlayWindow : Window
             return;
 
         long captured = _dpiGuard.Queue();
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
         {
             if (!_dpiGuard.IsCurrent(captured))
                 return;
@@ -170,6 +171,7 @@ public partial class OverlayWindow : Window
     /// </summary>
     internal void ExecuteDpiRepositionCore()
     {
+        NormalizeWindowSize(forceLayout: true);
         ApplyExtendedStyles();
         EnsureTopmost();
 
@@ -228,12 +230,14 @@ public partial class OverlayWindow : Window
         _currentTheme = theme;
         OverlayThemeResources.Apply(Resources, theme);
         ApplyOpacityToBorder();
+        QueueWindowSizeNormalization(forceLayout: false);
     }
 
     public void ApplyOpacity(OverlayOpacityPreference preference)
     {
         _currentOpacity = preference;
         ApplyOpacityToBorder();
+        QueueWindowSizeNormalization(forceLayout: false);
     }
 
     private void ApplyOpacityToBorder()
@@ -263,6 +267,8 @@ public partial class OverlayWindow : Window
 
     public void MoveToPosition(double left, double top)
     {
+        NormalizeWindowSize(forceLayout: false);
+
         IntPtr hwnd = _native.GetHandle(this);
         if (hwnd == IntPtr.Zero)
             return;
@@ -273,6 +279,7 @@ public partial class OverlayWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        NormalizeWindowSize(forceLayout: true);
         ApplyExtendedStyles();
         EnsureTopmost();
     }
@@ -285,7 +292,11 @@ public partial class OverlayWindow : Window
         if (!(bool)e.NewValue)
         {
             _dpiGuard.Invalidate();
+            _sizeNormalizationGuard.Invalidate();
+            return;
         }
+
+        QueueWindowSizeNormalization(forceLayout: true);
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -298,6 +309,7 @@ public partial class OverlayWindow : Window
         }
 
         _dpiGuard.Invalidate();
+        _sizeNormalizationGuard.Invalidate();
         if (_hwndSource != null)
         {
             _hwndSource.DpiChanged -= OnHwndSourceDpiChanged;
@@ -369,6 +381,7 @@ public partial class OverlayWindow : Window
 
     internal void ReassertTopmost()
     {
+        NormalizeWindowSize(forceLayout: true);
         EnsureTopmost();
     }
 
@@ -386,6 +399,8 @@ public partial class OverlayWindow : Window
             SessionsText.Text = lines[4];
             CacheText.Text = lines[5];
         }
+
+        QueueWindowSizeNormalization(forceLayout: false);
     }
 
     public void UpdateSettings(TraySettings settings)
@@ -406,10 +421,13 @@ public partial class OverlayWindow : Window
 
         _currentOpacity = settings.OverlayOpacity;
         ApplyOpacityToBorder();
+        QueueWindowSizeNormalization(forceLayout: true);
     }
 
     public void ResetPosition(TraySettings settings)
     {
+        NormalizeWindowSize(forceLayout: false);
+
         IntPtr hwnd = _native.GetHandle(this);
         if (hwnd == IntPtr.Zero)
             return;
@@ -493,5 +511,69 @@ public partial class OverlayWindow : Window
         _shutdownPrepared = true;
         _isShuttingDown = true;
         Close();
+    }
+
+    private void QueueWindowSizeNormalization(bool forceLayout)
+    {
+        if (_isShuttingDown || _isDragging || !IsLoaded || !IsVisible)
+            return;
+
+        long captured = _sizeNormalizationGuard.Queue();
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            if (!_sizeNormalizationGuard.IsCurrent(captured))
+                return;
+
+            NormalizeWindowSize(forceLayout);
+        }));
+    }
+
+    private void NormalizeWindowSize(bool forceLayout)
+    {
+        if (_isShuttingDown || _isDragging || !IsInitialized || !IsLoaded)
+            return;
+
+        // Keep the logical width deterministic. SizeToContent remains height-only,
+        // so text updates cannot turn a DPI transition into a wider window.
+        bool logicalSizeChanged = Width != OverlayWindowSizeCalculator.WidthDip
+            || MinWidth != OverlayWindowSizeCalculator.WidthDip
+            || MaxWidth != OverlayWindowSizeCalculator.WidthDip
+            || SizeToContent != SizeToContent.Height;
+
+        Width = OverlayWindowSizeCalculator.WidthDip;
+        MinWidth = OverlayWindowSizeCalculator.WidthDip;
+        MaxWidth = OverlayWindowSizeCalculator.WidthDip;
+        SizeToContent = SizeToContent.Height;
+        if (forceLayout || logicalSizeChanged || ActualHeight <= 0)
+        {
+            InvalidateMeasure();
+            UpdateLayout();
+        }
+
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd == IntPtr.Zero || !_native.GetWindowRect(hwnd, out RECT currentRect))
+            return;
+
+        double dpi = DpiHelper.GetDpiForWindow(hwnd);
+        var expected = OverlayWindowSizeCalculator.CalculatePhysicalSize(ActualHeight, dpi, dpi);
+        if (expected.Width <= 0 || expected.Height <= 0)
+            return;
+
+        int actualWidth = currentRect.Right - currentRect.Left;
+        int actualHeight = currentRect.Bottom - currentRect.Top;
+        if (!OverlayWindowSizeCalculator.Differs(actualWidth, expected.Width)
+            && !OverlayWindowSizeCalculator.Differs(actualHeight, expected.Height))
+        {
+            return;
+        }
+
+        _native.SetWindowPos(
+            hwnd,
+            IntPtr.Zero,
+            currentRect.Left,
+            currentRect.Top,
+            expected.Width,
+            expected.Height,
+            SWP_NOZORDER | SWP_NOACTIVATE);
     }
 }
