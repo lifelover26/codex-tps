@@ -37,6 +37,19 @@ public partial class OverlayWindow : Window
     private bool _isShuttingDown;
     private bool _shutdownPrepared;
     private bool _isDragging;
+    // Unified manual drag state. All non-locked drags use mouse capture +
+    // SetWindowPos instead of DragMove so Shift can be detected mid-drag.
+    // Shift is a temporary modifier: holding it constrains movement to one
+    // axis; releasing it immediately restores free drag. Both transitions
+    // re-anchor from the current window position so there is no visual jump.
+    private System.Drawing.Point _anchorMouse;
+    private int _anchorWindowLeft;
+    private int _anchorWindowTop;
+    // Frozen coordinate at the moment axis lock engages: Top for Horizontal,
+    // Left for Vertical. Kept as int to match physical-screen semantics.
+    private int _frozenCoordinate;
+    private AxisLockDirection _axisLockDirection;
+    private bool _previousShiftHeld;
     private EffectiveTheme _currentTheme = EffectiveTheme.Light;
     private OverlayOpacityPreference _currentOpacity = OverlayOpacityPreference.Default;
     private TraySettings? _currentSettings;
@@ -113,6 +126,10 @@ public partial class OverlayWindow : Window
 
     public event Action<double, double>? DragCompleted;
 
+    internal bool IsDragging => _isDragging;
+    internal bool IsAxisLocked => _isDragging && _axisLockDirection != AxisLockDirection.None;
+    internal AxisLockDirection CurrentAxisLockDirection => _axisLockDirection;
+
     public OverlayWindow(IMonitorWorkAreaProvider workAreaProvider)
         : this(workAreaProvider, new DefaultWindowNativeInterop())
     {
@@ -134,6 +151,9 @@ public partial class OverlayWindow : Window
         Closing += OnClosing;
         IsVisibleChanged += OnIsVisibleChanged;
         MouseLeftButtonDown += OnMouseLeftButtonDown;
+        MouseMove += OnMouseMove;
+        MouseLeftButtonUp += OnMouseLeftButtonUp;
+        LostMouseCapture += OnLostMouseCapture;
         MouseRightButtonDown += OnMouseRightButtonDown;
         RootBorder.ContextMenuOpening += OnContextMenuOpening;
     }
@@ -485,6 +505,7 @@ public partial class OverlayWindow : Window
         // a subsequent Show.
         if (!(bool)e.NewValue)
         {
+            CancelDrag();
             _dpiGuard.Invalidate();
             _sizeNormalizationGuard.Invalidate();
             return;
@@ -502,6 +523,7 @@ public partial class OverlayWindow : Window
             return;
         }
 
+        CancelDrag();
         _dpiGuard.Invalidate();
         _sizeNormalizationGuard.Invalidate();
         if (_hwndSource != null)
@@ -513,24 +535,209 @@ public partial class OverlayWindow : Window
 
     private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (_isLocked)
+        HandleMouseLeftButtonDown(
+            GetCursorScreenPosition(),
+            Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+    }
+
+    /// <summary>
+    /// Begins a unified manual drag. Both ordinary free drag and Shift axis
+    /// drag go through this path so Shift can be detected mid-drag via
+    /// <see cref="HandleDragMove"/>. The drag always uses mouse capture +
+    /// SetWindowPos in physical screen coordinates — never DragMove or
+    /// Window.Left/Top — to keep PerMonitorV2 DPI semantics consistent.
+    /// </summary>
+    internal void HandleMouseLeftButtonDown(System.Drawing.Point mouseScreen, bool shiftHeld)
+    {
+        if (_isLocked || _isShuttingDown || _isDragging)
+            return;
+
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd == IntPtr.Zero || !_native.GetWindowRect(hwnd, out RECT rect))
             return;
 
         _isDragging = true;
+        _previousShiftHeld = shiftHeld;
+        _anchorMouse = mouseScreen;
+        _anchorWindowLeft = rect.Left;
+        _anchorWindowTop = rect.Top;
+        _axisLockDirection = AxisLockDirection.None;
+
         try
         {
-            DragMove();
+            CaptureMouse();
         }
-        finally
+        catch
         {
-            _isDragging = false;
+            // Capture can fail in headless/test contexts; SetWindowPos still works.
         }
+    }
+
+    /// <summary>
+    /// Unified move handler for both free and axis-constrained drag.
+    /// Shift is a temporary modifier, not a persistent lock:
+    /// - Shift false→true: re-anchor from current window/mouse position, clear
+    ///   direction. The window does not move on this event. Subsequent moves
+    ///   determine direction from the post-press displacement only.
+    /// - Shift true→false: clear direction, re-anchor for free drag. The window
+    ///   does not move on this event. Subsequent moves are unconstrained.
+    /// - Shift held, direction None: move freely (threshold phase).
+    /// - Shift held, direction determined: move only along the locked axis. The
+    ///   frozen coordinate is pinned to the free-drag position at the moment
+    ///   direction is first chosen, so there is no visual jump.
+    /// </summary>
+    internal void HandleDragMove(System.Drawing.Point mouseScreen, bool shiftHeld)
+    {
+        if (!_isDragging)
+            return;
+
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd == IntPtr.Zero)
+            return;
+
+        // Detect Shift state transitions. Both transitions re-anchor from the
+        // current physical window position so there is no visual jump.
+        if (shiftHeld != _previousShiftHeld)
+        {
+            _previousShiftHeld = shiftHeld;
+            _axisLockDirection = AxisLockDirection.None;
+            if (_native.GetWindowRect(hwnd, out RECT rect))
+            {
+                _anchorMouse = mouseScreen;
+                _anchorWindowLeft = rect.Left;
+                _anchorWindowTop = rect.Top;
+            }
+            // Don't move the window on the transition event itself; the next
+            // move will use the new anchor seamlessly.
+            return;
+        }
+
+        int deltaX = mouseScreen.X - _anchorMouse.X;
+        int deltaY = mouseScreen.Y - _anchorMouse.Y;
+
+        if (!shiftHeld)
+        {
+            // Free drag: window follows mouse in both axes.
+            int newLeft = _anchorWindowLeft + deltaX;
+            int newTop = _anchorWindowTop + deltaY;
+            _native.SetWindowPos(hwnd, IntPtr.Zero, newLeft, newTop, 0, 0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        else if (_axisLockDirection == AxisLockDirection.None)
+        {
+            // Shift held but below threshold: move freely.
+            int freeLeft = _anchorWindowLeft + deltaX;
+            int freeTop = _anchorWindowTop + deltaY;
+
+            AxisLockDirection dir = AxisLockCalculator.DetermineDirection(
+                deltaX, deltaY, AxisLockCalculator.DefaultThreshold, AxisLockDirection.None);
+
+            if (dir != AxisLockDirection.None)
+            {
+                // Direction just determined: pin the frozen coordinate to the
+                // free-drag position so the constrained move lands at exactly
+                // the same spot — no jump.
+                _axisLockDirection = dir;
+                _frozenCoordinate = dir == AxisLockDirection.Horizontal ? freeTop : freeLeft;
+            }
+
+            _native.SetWindowPos(hwnd, IntPtr.Zero, freeLeft, freeTop, 0, 0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        else
+        {
+            // Axis-constrained: move only along the locked axis.
+            int newLeft = _axisLockDirection == AxisLockDirection.Horizontal
+                ? _anchorWindowLeft + deltaX
+                : _frozenCoordinate;
+            int newTop = _axisLockDirection == AxisLockDirection.Horizontal
+                ? _frozenCoordinate
+                : _anchorWindowTop + deltaY;
+            _native.SetWindowPos(hwnd, IntPtr.Zero, newLeft, newTop, 0, 0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
+
+    /// <summary>
+    /// Completes the drag: releases capture and fires DragCompleted exactly
+    /// once with the final physical coordinates. Idempotent so a second call
+    /// (e.g. MouseLeftButtonUp after LostMouseCapture) cannot double-fire.
+    /// </summary>
+    internal void EndDrag()
+    {
+        if (!_isDragging)
+            return;
+
+        _isDragging = false;
+        _axisLockDirection = AxisLockDirection.None;
+        _previousShiftHeld = false;
+
+        ReleaseMouseCaptureSafely();
 
         IntPtr hwnd = _native.GetHandle(this);
         if (hwnd != IntPtr.Zero && _native.GetWindowRect(hwnd, out RECT rect))
         {
             // Save physical screen coordinates (consistent with GetWindowRect/SetWindowPos/Screen.WorkingArea).
             DragCompleted?.Invoke(rect.Left, rect.Top);
+        }
+    }
+
+    /// <summary>
+    /// Aborts the drag without firing DragCompleted, used when mouse capture
+    /// is lost or the window hides/closes mid-drag. Idempotent.
+    /// </summary>
+    internal void CancelDrag()
+    {
+        if (!_isDragging)
+            return;
+
+        _isDragging = false;
+        _axisLockDirection = AxisLockDirection.None;
+        _previousShiftHeld = false;
+
+        ReleaseMouseCaptureSafely();
+    }
+
+    private void OnMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_isDragging)
+            return;
+        HandleDragMove(GetCursorScreenPosition(), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+    }
+
+    private void OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isDragging)
+            return;
+        EndDrag();
+    }
+
+    private void OnLostMouseCapture(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        CancelDrag();
+    }
+
+    private void ReleaseMouseCaptureSafely()
+    {
+        try
+        {
+            if (IsMouseCaptured)
+                ReleaseMouseCapture();
+        }
+        catch
+        {
+        }
+    }
+
+    private System.Drawing.Point GetCursorScreenPosition()
+    {
+        try
+        {
+            return System.Windows.Forms.Cursor.Position;
+        }
+        catch
+        {
+            return new System.Drawing.Point(0, 0);
         }
     }
 
