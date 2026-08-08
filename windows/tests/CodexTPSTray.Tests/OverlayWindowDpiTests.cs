@@ -560,4 +560,195 @@ public class OverlayWindowDpiTests
             Assert.Equal(60, capturedPoint.Value.Y); // (0 + 120) / 2
         });
     }
+
+    // =========================================================================
+    // MonitorPanelWindow DPI layout normalization: re-asserts fixed 390 DIP
+    // width after a DPI transition and on re-show after hide.
+    // =========================================================================
+
+    [Fact]
+    public void MonitorPanel_WindowRoot_EnablesPixelRounding()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = new MonitorPanelWindow(new MonitorPanelViewModel(TraySettings.Default));
+
+            // UseLayoutRounding + SnapsToDevicePixels on the Window root ensure the
+            // WPF-rendered background exactly tiles the Win32 client area at
+            // non-integer DPI scales, preventing the 1px black HWND edge.
+            Assert.True(window.UseLayoutRounding);
+            Assert.True(window.SnapsToDevicePixels);
+        });
+    }
+
+    [Fact]
+    public void MonitorPanel_RootContentGrid_EnablesPixelRounding()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = new MonitorPanelWindow(new MonitorPanelViewModel(TraySettings.Default));
+
+            var rootGrid = Assert.IsType<System.Windows.Controls.Grid>(window.Content);
+            Assert.True(rootGrid.UseLayoutRounding);
+            Assert.True(rootGrid.SnapsToDevicePixels);
+        });
+    }
+
+    [Fact]
+    public void MonitorPanel_DeclaredWidthAndSizeToContent_AreFixedByXaml()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = new MonitorPanelWindow(new MonitorPanelViewModel(TraySettings.Default));
+
+            // The XAML-declared fixed width and height-only SizeToContent must
+            // survive construction (the pixel-rounding fix must not change them).
+            Assert.Equal(MonitorPanelWindow.PanelLogicalWidth, window.Width);
+            Assert.Equal(SizeToContent.Height, window.SizeToContent);
+        });
+    }
+
+    [Fact]
+    public void MonitorPanel_NormalizePanelLayout_RestoresFixedLogicalWidthAndHeightOnlySizeToContent()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = new MonitorPanelWindow(new MonitorPanelViewModel(TraySettings.Default));
+
+            // Simulate width drift left by a PerMonitorV2 DPI transition.
+            window.Width = 480;
+            window.SizeToContent = SizeToContent.WidthAndHeight;
+
+            MonitorPanelWindow.RECT rect = window.NormalizePanelLayout();
+
+            Assert.Equal(MonitorPanelWindow.PanelLogicalWidth, window.Width);
+            Assert.Equal(SizeToContent.Height, window.SizeToContent);
+            // No live HWND in a unit test -> default rect, but the layout pass ran.
+            Assert.Equal(1, window.NormalizePanelLayoutCallCount);
+            Assert.Equal(0, rect.Left);
+        });
+    }
+
+    [Fact]
+    public void MonitorPanel_ExecuteDpiRepositionCore_NormalizesLayoutBeforeReposition()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = new MonitorPanelWindow(new MonitorPanelViewModel(TraySettings.Default));
+            window.Width = 520;
+            window.SizeToContent = SizeToContent.WidthAndHeight;
+
+            int before = window.NormalizePanelLayoutCallCount;
+            window.ExecuteDpiRepositionCore();
+
+            // Normalization must run as part of the DPI reposition path.
+            Assert.Equal(before + 1, window.NormalizePanelLayoutCallCount);
+            Assert.Equal(MonitorPanelWindow.PanelLogicalWidth, window.Width);
+            Assert.Equal(SizeToContent.Height, window.SizeToContent);
+        });
+    }
+
+    [Fact]
+    public void MonitorPanel_MultipleDpiCallbacks_OnlyLatestDispatchRuns()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = new MonitorPanelWindow(new MonitorPanelViewModel(TraySettings.Default));
+            int before = window.NormalizePanelLayoutCallCount;
+
+            long gen1 = window.QueueDpiChangedGeneration();
+            long gen2 = window.QueueDpiChangedGeneration();
+            long gen3 = window.QueueDpiChangedGeneration();
+
+            bool ran1 = window.RunDpiChangedDispatch(gen1);
+            bool ran2 = window.RunDpiChangedDispatch(gen2);
+            bool ran3 = window.RunDpiChangedDispatch(gen3);
+
+            // Only the latest generation is current; older ones are deduped.
+            Assert.False(ran1);
+            Assert.False(ran2);
+            Assert.True(ran3);
+            Assert.Equal(before + 1, window.NormalizePanelLayoutCallCount);
+        });
+    }
+
+    [Fact]
+    public void MonitorPanel_HideInvalidatesStaleDpiCallback()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = new MonitorPanelWindow(new MonitorPanelViewModel(TraySettings.Default));
+            int before = window.NormalizePanelLayoutCallCount;
+
+            // DPI event fires and queues a callback while the panel is visible.
+            long gen = window.QueueDpiChangedGeneration();
+
+            // Panel hides before the callback runs.
+            window.InvalidateDpiGeneration();
+
+            // The stale callback must NOT run or normalize.
+            bool ran = window.RunDpiChangedDispatch(gen);
+
+            Assert.False(ran);
+            Assert.Equal(before, window.NormalizePanelLayoutCallCount);
+        });
+    }
+
+    [Fact]
+    public void MonitorPanel_AfterHide_NewDpiCallbackRunsOnReshow()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = new MonitorPanelWindow(new MonitorPanelViewModel(TraySettings.Default));
+            int before = window.NormalizePanelLayoutCallCount;
+
+            long staleGen = window.QueueDpiChangedGeneration();
+            window.InvalidateDpiGeneration(); // hide
+            long freshGen = window.QueueDpiChangedGeneration(); // new DPI event after re-show
+
+            bool staleRan = window.RunDpiChangedDispatch(staleGen);
+            bool freshRan = window.RunDpiChangedDispatch(freshGen);
+
+            Assert.False(staleRan);
+            Assert.True(freshRan);
+            Assert.Equal(before + 1, window.NormalizePanelLayoutCallCount);
+        });
+    }
+
+    [Fact]
+    public void MonitorPanel_ShowNearTray_AfterDpiChangeWhileHidden_NormalizesLayout()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = new MonitorPanelWindow(new MonitorPanelViewModel(TraySettings.Default));
+            // Keep the window invisible throughout so the test never steals focus
+            // or flashes on screen. ShowNearTray captures/restores Opacity, so
+            // starting at 0 keeps it at 0 across the show/hide/reshow cycle.
+            window.Opacity = 0;
+
+            try
+            {
+                // Lifecycle: show, then hide (panel hidden with a live HWND).
+                window.Show();
+                window.Hide();
+
+                // Simulate DPI change while hidden: corrupt the logical width as
+                // if the stale physical HWND size leaked into the property.
+                window.Width = 460;
+                window.SizeToContent = SizeToContent.WidthAndHeight;
+                int before = window.NormalizePanelLayoutCallCount;
+
+                // Re-show via ShowNearTray — must normalize at the current DPI.
+                window.ShowNearTray();
+
+                Assert.True(window.NormalizePanelLayoutCallCount > before);
+                Assert.Equal(MonitorPanelWindow.PanelLogicalWidth, window.Width);
+                Assert.Equal(SizeToContent.Height, window.SizeToContent);
+            }
+            finally
+            {
+                window.PrepareForShutdown();
+            }
+        });
+    }
 }

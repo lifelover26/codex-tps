@@ -19,6 +19,18 @@ public partial class MonitorPanelWindow : Window
     private readonly DpiRepositionGuard _dpiGuard = new();
 
     /// <summary>
+    /// Fixed logical width of the panel in DIP. The panel must never widen due
+    /// to a DPI transition; <see cref="NormalizePanelLayout"/> re-asserts this.
+    /// </summary>
+    internal const double PanelLogicalWidth = 390.0;
+
+    /// <summary>
+    /// Number of times <see cref="NormalizePanelLayout"/> has performed a full
+    /// layout pass. Tests use this to verify DPI-callback dedup and ordering.
+    /// </summary>
+    internal int NormalizePanelLayoutCallCount { get; private set; }
+
+    /// <summary>
     /// Resolves a physical screen point to a Screen. Injectable for tests so
     /// they can verify DPI reposition uses the window center, not Cursor.Position.
     /// </summary>
@@ -78,7 +90,11 @@ public partial class MonitorPanelWindow : Window
             return;
 
         long captured = _dpiGuard.Queue();
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        // Render priority: WPF has finished its PerMonitorV2 DPI transform and
+        // layout pass, so re-asserting the logical width and updating layout
+        // here resyncs the physical HWND to 390 DIP at the new DPI before we
+        // reposition. The guard ensures only the latest DPI callback runs.
+        Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
         {
             if (!_dpiGuard.IsCurrent(captured))
                 return;
@@ -96,10 +112,102 @@ public partial class MonitorPanelWindow : Window
         if (_isShuttingDown || !IsLoaded || !IsVisible)
             return;
 
-        // On DPI change for an already-visible window: stay on the monitor the window
-        // is currently on (by window rect), do NOT jump to cursor screen.
+        ExecuteDpiRepositionCore();
+    }
+
+    /// <summary>
+    /// Core DPI reposition logic without visibility/shutdown guards. Tests call
+    /// this directly to verify layout normalization + reposition ordering without
+    /// needing a real DPI event or a shown window.
+    /// </summary>
+    internal void ExecuteDpiRepositionCore()
+    {
+        // Re-assert the fixed logical width and resync the physical HWND at the
+        // current DPI before repositioning. This repairs the occasional width
+        // drift left by WPF's PerMonitorV2 DPI transition.
+        NormalizePanelLayout();
+
+        // On DPI change for an already-visible window: stay on the monitor the
+        // window is currently on (by window rect), do NOT jump to cursor screen.
         RepositionToCurrentMonitor();
     }
+
+    /// <summary>
+    /// Re-asserts the fixed 390 DIP logical width, discards cached measure/arrange
+    /// state from a previous DPI, runs a layout pass at the current window DPI,
+    /// and re-fetches the physical window rect. Extracted as internal for
+    /// testability. Call this after WPF has completed its PerMonitorV2 DPI layout
+    /// pass (e.g. from a Render-priority Dispatcher callback) or when re-showing a
+    /// panel that may have missed a DPI change while hidden. This method does NOT
+    /// reposition the window; it only normalizes its size and layout.
+    /// </summary>
+    /// <returns>
+    /// The physical window rect at the current DPI, or <c>default</c> if the
+    /// HWND is unavailable.
+    /// </returns>
+    internal RECT NormalizePanelLayout()
+    {
+        if (_isShuttingDown || !IsInitialized)
+            return default;
+
+        NormalizePanelLayoutCallCount++;
+
+        // 1. Re-assert the fixed logical width. SizeToContent stays height-only so
+        //    a DPI transition can never widen the panel.
+        Width = PanelLogicalWidth;
+        SizeToContent = SizeToContent.Height;
+
+        // 2. Invalidate cached measure/arrange from the previous DPI so WPF
+        //    recomputes the visual tree at the current DPI.
+        InvalidateMeasure();
+        InvalidateArrange();
+
+        // 3. Force a synchronous layout pass. We are invoked from a Render-priority
+        //    Dispatcher callback (DPI change) or synchronously on ShowNearTray, so
+        //    WPF's own DPI layout pass has already completed. This resyncs the
+        //    physical HWND size to 390 DIP at the current DPI.
+        UpdateLayout();
+
+        // 4. Re-fetch the physical window rect at the current window DPI.
+        var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
+        if (hwndSource == null)
+            return default;
+
+        IntPtr hwnd = hwndSource.Handle;
+        if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out RECT rect))
+            return default;
+
+        return rect;
+    }
+
+    /// <summary>
+    /// Internal for tests: queues a DPI-changed generation token. Mirrors the
+    /// first half of <see cref="OnHwndSourceDpiChanged"/> without requiring a
+    /// real DPI event.
+    /// </summary>
+    internal long QueueDpiChangedGeneration() => _dpiGuard.Queue();
+
+    /// <summary>
+    /// Internal for tests: runs the DPI-changed dispatch work for a given
+    /// generation token. Returns <c>true</c> if the work ran (token was
+    /// current), <c>false</c> if it was deduped by a newer generation. Mirrors
+    /// the dispatched callback in <see cref="OnHwndSourceDpiChanged"/> without
+    /// requiring a Dispatcher pump.
+    /// </summary>
+    internal bool RunDpiChangedDispatch(long capturedGeneration)
+    {
+        if (!_dpiGuard.IsCurrent(capturedGeneration))
+            return false;
+
+        ExecuteDpiRepositionCore();
+        return true;
+    }
+
+    /// <summary>
+    /// Internal for tests: invalidates pending DPI generation tokens, mirroring
+    /// the hide path in <see cref="OnIsVisibleChanged"/>.
+    /// </summary>
+    internal void InvalidateDpiGeneration() => _dpiGuard.Invalidate();
 
     internal void ApplyTheme(EffectiveTheme theme)
     {
@@ -153,6 +261,13 @@ public partial class MonitorPanelWindow : Window
 
     public void ShowNearTray()
     {
+        // Invalidate any DPI callback queued while the panel was hidden so a
+        // stale Dispatcher callback cannot overwrite the layout we are about to
+        // normalize. The synchronous normalization below is authoritative for
+        // the current DPI; a fresh DPI event after this point queues a new,
+        // current generation and runs normally.
+        _dpiGuard.Invalidate();
+
         double originalOpacity = Opacity;
         Opacity = 0;
 
@@ -160,6 +275,12 @@ public partial class MonitorPanelWindow : Window
 
         try
         {
+            // DPI may have changed while the panel was hidden. Re-assert the
+            // fixed logical width and resync the physical HWND at the current
+            // DPI before positioning, so the physical rect used for positioning
+            // is correct.
+            NormalizePanelLayout();
+
             // Initial show: open near the tray on the screen where the cursor currently is.
             PositionNearCursorScreen();
         }
