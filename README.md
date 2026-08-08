@@ -39,6 +39,8 @@ Codex TPS for Windows reads the usage events already written to local Codex
 session logs and turns them into an at-a-glance throughput display. It does not
 require an API key and does not upload conversation data.
 
+**What's new in v0.3.7:** Fixed occasional 1px black edges on the Metrics panel at fractional DPI scales. The panel now uses pixel-aligned layout while preserving its fixed 390 DIP width.
+
 **What's new in v0.3.6:** Shift-dragging the unlocked overlay now uses a fixed-origin, threshold-based axis lock. Holding Shift allows smooth horizontal/vertical transitions without accumulated drift; releasing Shift immediately restores free dragging.
 
 **What's new in v0.3.5:** Right-clicking the desktop overlay while unlocked
@@ -143,6 +145,8 @@ troubleshooting, removal, and release packaging.
 Codex TPS for Windows 是一款 Windows 11 托盘工具。它读取 Codex 已写入
 本机的会话用量记录，显示不同时间窗口内的 token 吞吐率。程序本身不需要
 API Key，也不会上传对话内容。
+
+**v0.3.7 更新：** 修复 Metrics 面板在特定显示器缩放或分辨率下右侧、底部偶发出现黑边的问题，并保持固定 390 DIP 宽度。
 
 **v0.3.6 更新：** 未锁定悬浮窗时按住 Shift 拖动，会使用固定原点和阈值轴向锁定。按住 Shift 可在水平与垂直方向之间平滑切换，不会累积漂移；松开 Shift 后立即恢复自由拖动。
 
