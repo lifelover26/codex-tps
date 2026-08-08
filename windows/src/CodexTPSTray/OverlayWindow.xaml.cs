@@ -37,18 +37,26 @@ public partial class OverlayWindow : Window
     private bool _isShuttingDown;
     private bool _shutdownPrepared;
     private bool _isDragging;
-    // Unified manual drag state. All non-locked drags use mouse capture +
-    // SetWindowPos instead of DragMove so Shift can be detected mid-drag.
-    // Shift is a temporary modifier: holding it constrains movement to one
-    // axis; releasing it immediately restores free drag. Both transitions
-    // re-anchor from the current window position so there is no visual jump.
-    private System.Drawing.Point _anchorMouse;
-    private int _anchorWindowLeft;
-    private int _anchorWindowTop;
-    // Frozen coordinate at the moment axis lock engages: Top for Horizontal,
-    // Left for Vertical. Kept as int to match physical-screen semantics.
-    private int _frozenCoordinate;
-    private AxisLockDirection _axisLockDirection;
+    // Pure origin-absolute projection drag state. The window position is always
+    // computed as an absolute projection from the immutable drag origin — never
+    // accumulated frame-by-frame, never re-anchored on axis changes.
+    //
+    // 1. dragOriginMouse / dragOriginWindowLeft/Top: the mouse and window
+    //    position at mouse-down or Shift state transition. This is IMMUTABLE
+    //    during a single Shift-drag — axis switching never overwrites it.
+    //    All displacement (dx/dy) is relative to this origin.
+    //
+    // 2. currentAxis: None, Horizontal, or Vertical. The calculator produces
+    //    this state and the matching coordinates together. A short fixed-pixel
+    //    blend is used only while entering or changing rails.
+    //
+    // Because the origin never changes during a Shift drag, the cursor
+    // returning to the origin always produces the original window position —
+    // no drift, ever.
+    private System.Drawing.Point _dragOriginMouse;
+    private int _dragOriginWindowLeft;
+    private int _dragOriginWindowTop;
+    private AxisLockDirection _currentAxis;
     private bool _previousShiftHeld;
     private EffectiveTheme _currentTheme = EffectiveTheme.Light;
     private OverlayOpacityPreference _currentOpacity = OverlayOpacityPreference.Default;
@@ -127,8 +135,8 @@ public partial class OverlayWindow : Window
     public event Action<double, double>? DragCompleted;
 
     internal bool IsDragging => _isDragging;
-    internal bool IsAxisLocked => _isDragging && _axisLockDirection != AxisLockDirection.None;
-    internal AxisLockDirection CurrentAxisLockDirection => _axisLockDirection;
+    internal bool IsAxisLocked => _isDragging && _currentAxis != AxisLockDirection.None;
+    internal AxisLockDirection CurrentAxisLockDirection => _currentAxis;
 
     public OverlayWindow(IMonitorWorkAreaProvider workAreaProvider)
         : this(workAreaProvider, new DefaultWindowNativeInterop())
@@ -558,10 +566,10 @@ public partial class OverlayWindow : Window
 
         _isDragging = true;
         _previousShiftHeld = shiftHeld;
-        _anchorMouse = mouseScreen;
-        _anchorWindowLeft = rect.Left;
-        _anchorWindowTop = rect.Top;
-        _axisLockDirection = AxisLockDirection.None;
+        _dragOriginMouse = mouseScreen;
+        _dragOriginWindowLeft = rect.Left;
+        _dragOriginWindowTop = rect.Top;
+        _currentAxis = AxisLockDirection.None;
 
         try
         {
@@ -574,17 +582,14 @@ public partial class OverlayWindow : Window
     }
 
     /// <summary>
-    /// Unified move handler for both free and axis-constrained drag.
-    /// Shift is a temporary modifier, not a persistent lock:
-    /// - Shift false→true: re-anchor from current window/mouse position, clear
-    ///   direction. The window does not move on this event. Subsequent moves
-    ///   determine direction from the post-press displacement only.
-    /// - Shift true→false: clear direction, re-anchor for free drag. The window
-    ///   does not move on this event. Subsequent moves are unconstrained.
-    /// - Shift held, direction None: move freely (threshold phase).
-    /// - Shift held, direction determined: move only along the locked axis. The
-    ///   frozen coordinate is pinned to the free-drag position at the moment
-    ///   direction is first chosen, so there is no visual jump.
+    /// Unified move handler using pure origin-absolute projection. All target
+    /// coordinates are computed as absolute projections from the immutable drag
+    /// origin — never accumulated frame-by-frame, never re-anchored on axis
+    /// changes. While Shift is held, a strong direction is projected onto a
+    /// hard horizontal or vertical rail. Crossing the opposite-axis margin
+    /// uses one short fixed-pixel blend between the two origin-based rails.
+    /// Because the calculator returns state and coordinates together and the
+    /// origin never changes, returning to it cannot accumulate drift.
     /// </summary>
     internal void HandleDragMove(System.Drawing.Point mouseScreen, bool shiftHeld)
     {
@@ -595,67 +600,73 @@ public partial class OverlayWindow : Window
         if (hwnd == IntPtr.Zero)
             return;
 
-        // Detect Shift state transitions. Both transitions re-anchor from the
-        // current physical window position so there is no visual jump.
+        // Detect Shift state transitions. Re-anchor the drag origin to the
+        // current mouse and window position so the transition produces no move.
+        // This starts a new Shift drag segment with a fresh origin.
         if (shiftHeld != _previousShiftHeld)
         {
             _previousShiftHeld = shiftHeld;
-            _axisLockDirection = AxisLockDirection.None;
-            if (_native.GetWindowRect(hwnd, out RECT rect))
-            {
-                _anchorMouse = mouseScreen;
-                _anchorWindowLeft = rect.Left;
-                _anchorWindowTop = rect.Top;
-            }
-            // Don't move the window on the transition event itself; the next
-            // move will use the new anchor seamlessly.
+            _currentAxis = AxisLockDirection.None;
+            SyncDragOrigin(hwnd, mouseScreen);
             return;
         }
 
-        int deltaX = mouseScreen.X - _anchorMouse.X;
-        int deltaY = mouseScreen.Y - _anchorMouse.Y;
+        // Absolute displacement from the immutable drag origin.
+        int dx = mouseScreen.X - _dragOriginMouse.X;
+        int dy = mouseScreen.Y - _dragOriginMouse.Y;
 
         if (!shiftHeld)
         {
-            // Free drag: window follows mouse in both axes.
-            int newLeft = _anchorWindowLeft + deltaX;
-            int newTop = _anchorWindowTop + deltaY;
-            _native.SetWindowPos(hwnd, IntPtr.Zero, newLeft, newTop, 0, 0,
-                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            // Free drag: absolute projection from drag origin onto both axes.
+            MoveWindowTo(hwnd, _dragOriginWindowLeft + dx, _dragOriginWindowTop + dy);
+            return;
         }
-        else if (_axisLockDirection == AxisLockDirection.None)
+
+        // Shift held — state and coordinates come from one origin-absolute
+        // projection. The short transition band is part of this projection;
+        // there is no second diagnostic-only direction path.
+        AxisProjection projection = AxisLockCalculator.Project(
+            dx,
+            dy,
+            _dragOriginWindowLeft,
+            _dragOriginWindowTop,
+            _currentAxis);
+        _currentAxis = projection.Direction;
+
+        MoveWindowTo(hwnd, projection.Left, projection.Top);
+    }
+
+    /// <summary>
+    /// Re-anchors the immutable drag origin to the current mouse and window
+    /// position without moving the window. Used on Shift state transitions so
+    /// the next MouseMove starts a fresh projection from the current position.
+    /// The window rect is read from GetWindowRect here because this is a state
+    /// transition (not a per-frame move) — the readback establishes the new
+    /// origin, not an accumulation base.
+    /// </summary>
+    private void SyncDragOrigin(IntPtr hwnd, System.Drawing.Point mouseScreen)
+    {
+        if (_native.GetWindowRect(hwnd, out RECT rect))
         {
-            // Shift held but below threshold: move freely.
-            int freeLeft = _anchorWindowLeft + deltaX;
-            int freeTop = _anchorWindowTop + deltaY;
-
-            AxisLockDirection dir = AxisLockCalculator.DetermineDirection(
-                deltaX, deltaY, AxisLockCalculator.DefaultThreshold, AxisLockDirection.None);
-
-            if (dir != AxisLockDirection.None)
-            {
-                // Direction just determined: pin the frozen coordinate to the
-                // free-drag position so the constrained move lands at exactly
-                // the same spot — no jump.
-                _axisLockDirection = dir;
-                _frozenCoordinate = dir == AxisLockDirection.Horizontal ? freeTop : freeLeft;
-            }
-
-            _native.SetWindowPos(hwnd, IntPtr.Zero, freeLeft, freeTop, 0, 0,
-                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            _dragOriginWindowLeft = rect.Left;
+            _dragOriginWindowTop = rect.Top;
         }
-        else
-        {
-            // Axis-constrained: move only along the locked axis.
-            int newLeft = _axisLockDirection == AxisLockDirection.Horizontal
-                ? _anchorWindowLeft + deltaX
-                : _frozenCoordinate;
-            int newTop = _axisLockDirection == AxisLockDirection.Horizontal
-                ? _frozenCoordinate
-                : _anchorWindowTop + deltaY;
-            _native.SetWindowPos(hwnd, IntPtr.Zero, newLeft, newTop, 0, 0,
-                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-        }
+        _dragOriginMouse = mouseScreen;
+    }
+
+    /// <summary>
+    /// Moves the window to the target position and reads back the actual rect.
+    /// The readback accounts for DPI/multi-monitor rounding but is NOT used as
+    /// an accumulation base — the drag origin remains the projection base.
+    /// </summary>
+    private void MoveWindowTo(IntPtr hwnd, int targetLeft, int targetTop)
+    {
+        _native.SetWindowPos(hwnd, IntPtr.Zero, targetLeft, targetTop, 0, 0,
+            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+
+        // Read back to account for DPI/multi-monitor rounding, but the drag
+        // origin remains the projection base — no accumulation.
+        _native.GetWindowRect(hwnd, out RECT _);
     }
 
     /// <summary>
@@ -669,7 +680,7 @@ public partial class OverlayWindow : Window
             return;
 
         _isDragging = false;
-        _axisLockDirection = AxisLockDirection.None;
+        _currentAxis = AxisLockDirection.None;
         _previousShiftHeld = false;
 
         ReleaseMouseCaptureSafely();
@@ -692,7 +703,7 @@ public partial class OverlayWindow : Window
             return;
 
         _isDragging = false;
-        _axisLockDirection = AxisLockDirection.None;
+        _currentAxis = AxisLockDirection.None;
         _previousShiftHeld = false;
 
         ReleaseMouseCaptureSafely();

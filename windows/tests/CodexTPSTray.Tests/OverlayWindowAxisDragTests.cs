@@ -5,67 +5,335 @@ using Xunit;
 
 namespace CodexTPSTray.Tests;
 
+// ════════════════════════════════════════════════════════════════════════════
+// Pure calculator tests — AxisLockCalculator (no WPF window required)
+// ════════════════════════════════════════════════════════════════════════════
+
 public class AxisLockCalculatorTests
 {
+    // ── SmoothStep ──
+
     [Fact]
-    public void WithinThreshold_ReturnsNone()
+    public void SmoothStep_BelowEdge0_ReturnsZero()
     {
-        Assert.Equal(AxisLockDirection.None,
-            AxisLockCalculator.DetermineDirection(2, 1, 4, AxisLockDirection.None));
+        Assert.Equal(0.0, AxisLockCalculator.SmoothStep(0.15, 0.50, 0.10));
     }
 
     [Fact]
-    public void ExactlyAtThreshold_ReturnsNone()
+    public void SmoothStep_AboveEdge1_ReturnsOne()
     {
-        // Must strictly exceed threshold on the dominant axis.
-        Assert.Equal(AxisLockDirection.None,
-            AxisLockCalculator.DetermineDirection(4, 0, 4, AxisLockDirection.None));
+        Assert.Equal(1.0, AxisLockCalculator.SmoothStep(0.15, 0.50, 0.60));
     }
 
     [Fact]
-    public void XGreaterThanY_ReturnsHorizontal()
+    public void SmoothStep_AtEdge0_ReturnsZero()
+    {
+        Assert.Equal(0.0, AxisLockCalculator.SmoothStep(0.15, 0.50, 0.15));
+    }
+
+    [Fact]
+    public void SmoothStep_AtEdge1_ReturnsOne()
+    {
+        Assert.Equal(1.0, AxisLockCalculator.SmoothStep(0.15, 0.50, 0.50));
+    }
+
+    [Fact]
+    public void SmoothStep_AtMidpoint_ReturnsHalf()
+    {
+        // SmoothStep(0, 1, 0.5) = 0.25 * 2 = 0.5
+        Assert.Equal(0.5, AxisLockCalculator.SmoothStep(0.0, 1.0, 0.5));
+    }
+
+    // ── Dominance ──
+
+    [Fact]
+    public void Dominance_PureHorizontal_ReturnsOne()
+    {
+        Assert.Equal(1.0, AxisLockCalculator.Dominance(100, 0));
+    }
+
+    [Fact]
+    public void Dominance_PureVertical_ReturnsMinusOne()
+    {
+        Assert.Equal(-1.0, AxisLockCalculator.Dominance(0, 100));
+    }
+
+    [Fact]
+    public void Dominance_Diagonal_ReturnsZero()
+    {
+        Assert.Equal(0.0, AxisLockCalculator.Dominance(50, 50));
+    }
+
+    [Fact]
+    public void Dominance_ZeroDisplacement_ReturnsZero()
+    {
+        Assert.Equal(0.0, AxisLockCalculator.Dominance(0, 0));
+    }
+
+    [Fact]
+    public void Dominance_NegativeDeltas_UsesAbsoluteValues()
+    {
+        // |−100| − |−5|  /  |−100| + |−5|  =  95 / 105
+        Assert.Equal(95.0 / 105.0, AxisLockCalculator.Dominance(-100, -5));
+    }
+
+    [Fact]
+    public void PixelThresholds_UseOriginalValues()
+    {
+        Assert.Equal(6.0, AxisLockCalculator.EnterThreshold);
+        Assert.Equal(8.0, AxisLockCalculator.ResetThreshold);
+        Assert.Equal(8.0, AxisLockCalculator.SwitchMargin);
+        Assert.Equal(12.0, AxisLockCalculator.TransitionWidth);
+    }
+
+    // ── ComputeTarget: hard axis constraints ──
+
+    [Fact]
+    public void ComputeTarget_StrongHorizontal_HardAxisConstraint()
+    {
+        // dx=100, dy=5 → dominance ≈ 0.905 > LockFullRatio → full H suppression.
+        // Top is pressed to originTop; Left follows dx freely.
+        var (left, top) = AxisLockCalculator.ComputeTarget(100, 5, 200, 150);
+        Assert.Equal(300, left);
+        Assert.Equal(150, top);
+    }
+
+    [Fact]
+    public void ComputeTarget_StrongVertical_HardAxisConstraint()
+    {
+        // dx=5, dy=100 → dominance ≈ −0.905 → full V suppression.
+        // Left is pressed to originLeft; Top follows dy freely.
+        var (left, top) = AxisLockCalculator.ComputeTarget(5, 100, 200, 150);
+        Assert.Equal(200, left);
+        Assert.Equal(250, top);
+    }
+
+    // ── ComputeTarget: free movement ──
+
+    [Fact]
+    public void ComputeTarget_Diagonal_FreeMovement()
+    {
+        // dominance = 0 → no suppression → window follows cursor.
+        var (left, top) = AxisLockCalculator.ComputeTarget(50, 50, 200, 150);
+        Assert.Equal(250, left);
+        Assert.Equal(200, top);
+    }
+
+    [Fact]
+    public void ComputeTarget_InsideSwitchMargin_FollowsCursor()
+    {
+        var (left, top) = AxisLockCalculator.ComputeTarget(54, 48, 200, 150);
+        Assert.Equal(254, left);
+        Assert.Equal(198, top);
+    }
+
+    [Fact]
+    public void ComputeTarget_ZeroDisplacement_ReturnsOrigin()
+    {
+        var (left, top) = AxisLockCalculator.ComputeTarget(0, 0, 200, 150);
+        Assert.Equal(200, left);
+        Assert.Equal(150, top);
+    }
+
+    [Fact]
+    public void ComputeTarget_ExplicitHorizontalState_UsesOriginRail()
+    {
+        var (left, top) = AxisLockCalculator.ComputeTarget(
+            80, 40, 200, 150, AxisLockDirection.Horizontal);
+
+        Assert.Equal(280, left);
+        Assert.Equal(150, top);
+    }
+
+    [Fact]
+    public void ComputeTarget_ExplicitVerticalState_UsesOriginRail()
+    {
+        var (left, top) = AxisLockCalculator.ComputeTarget(
+            40, 80, 200, 150, AxisLockDirection.Vertical);
+
+        Assert.Equal(200, left);
+        Assert.Equal(230, top);
+    }
+
+    [Fact]
+    public void ComputeTarget_NegativeDeltas_StrongHorizontal()
+    {
+        var (left, top) = AxisLockCalculator.ComputeTarget(-100, -5, 200, 150);
+        Assert.Equal(100, left);
+        Assert.Equal(150, top);
+    }
+
+    // ── ComputeTarget: transition zone (partial suppression) ──
+
+    [Fact]
+    public void ComputeTarget_TransitionZone_PartialSuppression()
+    {
+        // Horizontal leads by 14px: halfway through the 8..20px entry band.
+        // Free (40,26) blends halfway to H (40,0).
+        var (left, top) = AxisLockCalculator.ComputeTarget(40, 26, 200, 150);
+        Assert.Equal(240, left);
+        Assert.Equal(163, top);
+    }
+
+    [Fact]
+    public void ComputeTarget_TransitionZone_SymmetricForVertical()
+    {
+        // Symmetric halfway blend from free movement to the V rail.
+        var (left, top) = AxisLockCalculator.ComputeTarget(26, 40, 200, 150);
+        Assert.Equal(213, left);
+        Assert.Equal(190, top);
+    }
+
+    [Fact]
+    public void ComputeTarget_Continuous_NoJumpNearDiagonal()
+    {
+        // The 8px entry margin keeps a near-diagonal nudge free.
+        var (left0, top0) = AxisLockCalculator.ComputeTarget(50, 50, 200, 150);
+        var (left1, top1) = AxisLockCalculator.ComputeTarget(51, 49, 200, 150);
+        Assert.Equal(250, left0);
+        Assert.Equal(200, top0);
+        Assert.Equal(251, left1);
+        Assert.Equal(199, top1);
+    }
+
+    // ── EvaluateDirection: entering a direction from None ──
+
+    [Fact]
+    public void EvaluateDirection_None_StrongHorizontal_LocksHorizontal()
+    {
+        var r = AxisLockCalculator.EvaluateDirection(100, 5, AxisLockDirection.None);
+        Assert.Equal(AxisLockDirection.Horizontal, r.Direction);
+        Assert.True(r.AxisChanged);
+    }
+
+    [Fact]
+    public void EvaluateDirection_None_StrongVertical_LocksVertical()
+    {
+        var r = AxisLockCalculator.EvaluateDirection(5, 100, AxisLockDirection.None);
+        Assert.Equal(AxisLockDirection.Vertical, r.Direction);
+        Assert.True(r.AxisChanged);
+    }
+
+    [Fact]
+    public void EvaluateDirection_None_NearDiagonal_StaysNone()
+    {
+        var r = AxisLockCalculator.EvaluateDirection(50, 50, AxisLockDirection.None);
+        Assert.Equal(AxisLockDirection.None, r.Direction);
+        Assert.False(r.AxisChanged);
+    }
+
+    [Fact]
+    public void EvaluateDirection_None_InsideSwitchMargin_StaysNone()
+    {
+        var r = AxisLockCalculator.EvaluateDirection(54, 48, AxisLockDirection.None);
+        Assert.Equal(AxisLockDirection.None, r.Direction);
+        Assert.False(r.AxisChanged);
+    }
+
+    // ── EvaluateDirection: hysteresis (staying locked) ──
+
+    [Fact]
+    public void EvaluateDirection_Horizontal_NearDiagonal_StaysHorizontal()
+    {
+        var r = AxisLockCalculator.EvaluateDirection(50, 50, AxisLockDirection.Horizontal);
+        Assert.Equal(AxisLockDirection.Horizontal, r.Direction);
+        Assert.False(r.AxisChanged);
+    }
+
+    [Fact]
+    public void EvaluateDirection_Horizontal_BelowSwitchThreshold_StaysHorizontal()
+    {
+        // Vertical leads by exactly 8px; switching requires more than 8px.
+        var r = AxisLockCalculator.EvaluateDirection(40, 48, AxisLockDirection.Horizontal);
+        Assert.Equal(AxisLockDirection.Horizontal, r.Direction);
+        Assert.False(r.AxisChanged);
+    }
+
+    [Fact]
+    public void EvaluateDirection_Vertical_NearDiagonal_StaysVertical()
+    {
+        var r = AxisLockCalculator.EvaluateDirection(50, 50, AxisLockDirection.Vertical);
+        Assert.Equal(AxisLockDirection.Vertical, r.Direction);
+        Assert.False(r.AxisChanged);
+    }
+
+    [Fact]
+    public void EvaluateDirection_Vertical_BelowSwitchThreshold_StaysVertical()
+    {
+        // Horizontal leads by exactly 8px; switching requires more than 8px.
+        var r = AxisLockCalculator.EvaluateDirection(48, 40, AxisLockDirection.Vertical);
+        Assert.Equal(AxisLockDirection.Vertical, r.Direction);
+        Assert.False(r.AxisChanged);
+    }
+
+    // ── EvaluateDirection: switching axes ──
+
+    [Fact]
+    public void EvaluateDirection_Horizontal_StrongVertical_Switches()
+    {
+        var r = AxisLockCalculator.EvaluateDirection(5, 100, AxisLockDirection.Horizontal);
+        Assert.Equal(AxisLockDirection.Vertical, r.Direction);
+        Assert.True(r.AxisChanged);
+    }
+
+    [Fact]
+    public void EvaluateDirection_Vertical_StrongHorizontal_Switches()
+    {
+        var r = AxisLockCalculator.EvaluateDirection(100, 5, AxisLockDirection.Vertical);
+        Assert.Equal(AxisLockDirection.Horizontal, r.Direction);
+        Assert.True(r.AxisChanged);
+    }
+
+    [Fact]
+    public void Project_HorizontalToVertical_UsesVisibleTransitionBand()
+    {
+        AxisProjection start = AxisLockCalculator.Project(
+            40, 48, 200, 150, AxisLockDirection.Horizontal);
+        Assert.Equal(AxisLockDirection.Horizontal, start.Direction);
+        Assert.Equal(240, start.Left);
+        Assert.Equal(150, start.Top);
+        Assert.Equal(0.0, start.TransitionProgress);
+
+        AxisProjection midpoint = AxisLockCalculator.Project(
+            40, 54, 200, 150, AxisLockDirection.Horizontal);
+        Assert.Equal(AxisLockDirection.Horizontal, midpoint.Direction);
+        Assert.Equal(220, midpoint.Left);
+        Assert.Equal(177, midpoint.Top);
+        Assert.Equal(0.5, midpoint.TransitionProgress);
+
+        AxisProjection complete = AxisLockCalculator.Project(
+            40, 60, 200, 150, AxisLockDirection.Horizontal);
+        Assert.Equal(AxisLockDirection.Vertical, complete.Direction);
+        Assert.Equal(200, complete.Left);
+        Assert.Equal(210, complete.Top);
+        Assert.Equal(1.0, complete.TransitionProgress);
+    }
+
+    // ── EvaluateDirection: zero displacement ──
+
+    [Fact]
+    public void EvaluateDirection_ZeroDisplacement_ReturnsNone()
+    {
+        var r = AxisLockCalculator.EvaluateDirection(0, 0, AxisLockDirection.Horizontal);
+        Assert.Equal(AxisLockDirection.None, r.Direction);
+        Assert.True(r.AxisChanged);
+    }
+
+    // ── EvaluateDirection: negative deltas ──
+
+    [Fact]
+    public void EvaluateDirection_NegativeDeltas_ComparedByAbsoluteValue()
     {
         Assert.Equal(AxisLockDirection.Horizontal,
-            AxisLockCalculator.DetermineDirection(10, 2, 4, AxisLockDirection.None));
-    }
-
-    [Fact]
-    public void YGreaterThanX_ReturnsVertical()
-    {
+            AxisLockCalculator.EvaluateDirection(-100, -5, AxisLockDirection.None).Direction);
         Assert.Equal(AxisLockDirection.Vertical,
-            AxisLockCalculator.DetermineDirection(2, 10, 4, AxisLockDirection.None));
-    }
-
-    [Fact]
-    public void Tie_ReturnsVertical()
-    {
-        Assert.Equal(AxisLockDirection.Vertical,
-            AxisLockCalculator.DetermineDirection(10, 10, 4, AxisLockDirection.None));
-    }
-
-    [Fact]
-    public void AlreadyHorizontal_StaysHorizontalEvenIfVerticalLarger()
-    {
-        Assert.Equal(AxisLockDirection.Horizontal,
-            AxisLockCalculator.DetermineDirection(0, 100, 4, AxisLockDirection.Horizontal));
-    }
-
-    [Fact]
-    public void AlreadyVertical_StaysVerticalEvenIfHorizontalLarger()
-    {
-        Assert.Equal(AxisLockDirection.Vertical,
-            AxisLockCalculator.DetermineDirection(100, 0, 4, AxisLockDirection.Vertical));
-    }
-
-    [Fact]
-    public void NegativeDeltas_ComparedByAbsoluteValue()
-    {
-        Assert.Equal(AxisLockDirection.Horizontal,
-            AxisLockCalculator.DetermineDirection(-20, -3, 4, AxisLockDirection.None));
-        Assert.Equal(AxisLockDirection.Vertical,
-            AxisLockCalculator.DetermineDirection(-3, -20, 4, AxisLockDirection.None));
+            AxisLockCalculator.EvaluateDirection(-5, -100, AxisLockDirection.None).Direction);
     }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// Integration tests — OverlayWindow drag with continuous axis locking
+// ════════════════════════════════════════════════════════════════════════════
 
 public class OverlayWindowAxisDragTests
 {
@@ -132,348 +400,465 @@ public class OverlayWindowAxisDragTests
     private static (int X, int Y, uint Flags) LastMove(FakeWindowNativeInterop interop) =>
         interop.MoveCalls[^1];
 
-    // ── 1. Shift at press, horizontal lock ──
+    // ── 1. Strong horizontal: hard axis constraint ──
 
     [Fact]
-    public void ShiftAtPress_HorizontalLock_KeepsTopConstant()
+    public void StrongHorizontal_HardAxisConstraint()
     {
         WpfTestHelpers.RunInStaWithWpf(() =>
         {
             var (window, interop) = CreateWindow();
 
             window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            // Below threshold: free drag.
-            window.HandleDragMove(new System.Drawing.Point(503, 502), shiftHeld: true);
-            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
-
-            // Above threshold: lock horizontal.
-            window.HandleDragMove(new System.Drawing.Point(560, 503), shiftHeld: true);
+            // dx=100, dy=10 → dominance ≈ 0.818 → full H suppression.
+            window.HandleDragMove(new System.Drawing.Point(600, 510), shiftHeld: true);
 
             Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
-            var last = LastMove(interop);
-            Assert.Equal(260, last.X); // 200 + 60
-            Assert.Equal(153, last.Y); // 150 + 3 (frozen at free-drag position)
+            Assert.Equal(300, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top); // pressed to originTop
         });
     }
 
-    // ── 2. Shift at press, vertical lock ──
+    // ── 2. Strong vertical: hard axis constraint ──
 
     [Fact]
-    public void ShiftAtPress_VerticalLock_KeepsLeftConstant()
+    public void StrongVertical_HardAxisConstraint()
     {
         WpfTestHelpers.RunInStaWithWpf(() =>
         {
             var (window, interop) = CreateWindow();
 
             window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(503, 560), shiftHeld: true);
+            // dx=10, dy=100 → dominance ≈ −0.818 → full V suppression.
+            window.HandleDragMove(new System.Drawing.Point(510, 600), shiftHeld: true);
 
             Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
-            // Continue moving — Left frozen.
-            window.HandleDragMove(new System.Drawing.Point(503, 580), shiftHeld: true);
-            var last = LastMove(interop);
-            Assert.Equal(203, last.X);
-            Assert.Equal(230, last.Y);
+            Assert.Equal(200, interop.CurrentRect.Left); // pressed to originLeft
+            Assert.Equal(250, interop.CurrentRect.Top);
         });
     }
 
-    // ── 3. Free drag → press Shift, no jump at transition ──
+    // ── 3. Far arcs use a short state-driven transition ──
 
     [Fact]
-    public void FreeDrag_ThenShift_NoJumpAtTransition()
+    public void Arc_HorizontalToVertical_WithoutReturningToOrigin_SwitchesSmoothly()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+
+            // Strong H: Window → (300, 150).
+            window.HandleDragMove(new System.Drawing.Point(600, 510), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(300, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // A diagonal remains on the current H rail because the opposite
+            // axis has not crossed the 8px switch margin.
+            window.HandleDragMove(new System.Drawing.Point(550, 550), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(250, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // Vertical leads by 14px: halfway through the fixed 12px blend.
+            window.HandleDragMove(new System.Drawing.Point(540, 554), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(220, interop.CurrentRect.Left);
+            Assert.Equal(177, interop.CurrentRect.Top);
+
+            // Vertical leads by 20px: transition completes on the V rail.
+            window.HandleDragMove(new System.Drawing.Point(540, 560), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
+            Assert.Equal(200, interop.CurrentRect.Left);
+            Assert.Equal(210, interop.CurrentRect.Top);
+
+            // Strong V continues on the hard V rail.
+            window.HandleDragMove(new System.Drawing.Point(510, 600), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
+            Assert.Equal(200, interop.CurrentRect.Left);
+            Assert.Equal(250, interop.CurrentRect.Top);
+        });
+    }
+
+    // ── 4. Intermediate points move monotonically through the blend ──
+
+    [Fact]
+    public void Arc_WithIntermediatePoints_TransitionIsMonotonic()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+
+            // Strong H: Window → (300, 150).
+            window.HandleDragMove(new System.Drawing.Point(600, 510), shiftHeld: true);
+            int prevLeft = interop.CurrentRect.Left;
+            int prevTop = interop.CurrentRect.Top;
+            Assert.Equal(300, prevLeft);
+            Assert.Equal(150, prevTop);
+
+            // Still on the H rail.
+            window.HandleDragMove(new System.Drawing.Point(570, 530), shiftHeld: true);
+            int left1 = interop.CurrentRect.Left;
+            int top1 = interop.CurrentRect.Top;
+            Assert.Equal(270, left1);
+            Assert.Equal(150, top1);
+
+            // Just inside the transition: movement has started toward V but
+            // remains close to the H rail.
+            window.HandleDragMove(new System.Drawing.Point(545, 555), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            int left2 = interop.CurrentRect.Left;
+            int top2 = interop.CurrentRect.Top;
+            Assert.Equal(242, left2);
+            Assert.Equal(154, top2);
+
+            // Midpoint and completion progress monotonically toward V.
+            window.HandleDragMove(new System.Drawing.Point(540, 554), shiftHeld: true);
+            Assert.Equal(220, interop.CurrentRect.Left);
+            Assert.Equal(177, interop.CurrentRect.Top);
+
+            window.HandleDragMove(new System.Drawing.Point(540, 560), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
+            Assert.Equal(200, interop.CurrentRect.Left);
+            Assert.Equal(210, interop.CurrentRect.Top);
+        });
+    }
+
+    // ── 5. Diagonal jitter from None: no frequent direction flip ──
+
+    [Fact]
+    public void DiagonalJitter_FromNone_NoDirectionFlip()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, _) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+
+            // dominance = 0 → None.
+            window.HandleDragMove(new System.Drawing.Point(550, 550), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
+
+            // Horizontal leads by only 4px, inside the 8px margin.
+            window.HandleDragMove(new System.Drawing.Point(552, 548), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
+
+            // Vertical leads by only 4px, inside the 8px margin.
+            window.HandleDragMove(new System.Drawing.Point(548, 552), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
+
+            // dominance = 0 → None.
+            window.HandleDragMove(new System.Drawing.Point(550, 550), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
+        });
+    }
+
+    // ── 6. Diagonal jitter from Horizontal: no frequent direction flip ──
+
+    [Fact]
+    public void DiagonalJitter_FromHorizontal_NoDirectionFlip()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, _) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+
+            // Lock H.
+            window.HandleDragMove(new System.Drawing.Point(600, 510), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+
+            // Move near diagonal — hysteresis keeps H.
+            window.HandleDragMove(new System.Drawing.Point(550, 550), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+
+            window.HandleDragMove(new System.Drawing.Point(552, 548), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+
+            window.HandleDragMove(new System.Drawing.Point(548, 552), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+
+            window.HandleDragMove(new System.Drawing.Point(550, 550), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+        });
+    }
+
+    // ── 7. H → short blend → V → short blend → H ──
+
+    [Fact]
+    public void HorizontalVerticalHorizontal_Cycle_ReturnToOrigin_NoDrift()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+
+            // H: Window → (300, 150).
+            window.HandleDragMove(new System.Drawing.Point(600, 510), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+
+            // Complete an H → V transition.
+            window.HandleDragMove(new System.Drawing.Point(540, 554), shiftHeld: true);
+            Assert.Equal(220, interop.CurrentRect.Left);
+            Assert.Equal(177, interop.CurrentRect.Top);
+            window.HandleDragMove(new System.Drawing.Point(540, 560), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
+            Assert.Equal(200, interop.CurrentRect.Left);
+            Assert.Equal(210, interop.CurrentRect.Top);
+
+            // Complete a V → H transition through the same fixed-width band.
+            window.HandleDragMove(new System.Drawing.Point(554, 540), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
+            Assert.Equal(227, interop.CurrentRect.Left);
+            Assert.Equal(170, interop.CurrentRect.Top);
+            window.HandleDragMove(new System.Drawing.Point(560, 540), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(260, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // Cursor returns to origin: Window → (200, 150). No drift.
+            window.HandleDragMove(new System.Drawing.Point(500, 500), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
+            Assert.Equal(200, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+        });
+    }
+
+    // ── 8. Multiple blended switches: no accumulated drift ──
+
+    [Fact]
+    public void MultipleSwitches_NoAccumulatedDrift()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+
+            // H.
+            window.HandleDragMove(new System.Drawing.Point(600, 510), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(300, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // V through the fixed transition band.
+            window.HandleDragMove(new System.Drawing.Point(540, 554), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(540, 560), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
+            Assert.Equal(200, interop.CurrentRect.Left);
+            Assert.Equal(210, interop.CurrentRect.Top);
+
+            // H again.
+            window.HandleDragMove(new System.Drawing.Point(554, 540), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(560, 540), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(260, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // V again.
+            window.HandleDragMove(new System.Drawing.Point(540, 554), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(540, 560), shiftHeld: true);
+            Assert.Equal(200, interop.CurrentRect.Left);
+            Assert.Equal(210, interop.CurrentRect.Top);
+
+            // H again.
+            window.HandleDragMove(new System.Drawing.Point(554, 540), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(560, 540), shiftHeld: true);
+            Assert.Equal(260, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // Cursor returns to origin: Window → (200, 150). No drift.
+            window.HandleDragMove(new System.Drawing.Point(500, 500), shiftHeld: true);
+            Assert.Equal(200, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+        });
+    }
+
+    // ── 9. Cursor returns to origin after H lock → exact original ──
+
+    [Fact]
+    public void CursorReturnsToOrigin_WindowReturnsToOriginal()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+
+            // H: Window → (230, 150).
+            window.HandleDragMove(new System.Drawing.Point(530, 502), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+
+            // Continue H: Window → (260, 150).
+            window.HandleDragMove(new System.Drawing.Point(560, 502), shiftHeld: true);
+            Assert.Equal(260, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // Cursor returns exactly to origin: Window → (200, 150).
+            window.HandleDragMove(new System.Drawing.Point(500, 500), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
+            Assert.Equal(200, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+        });
+    }
+
+    // ── 10. Horizontal path is reversible (no drift along the rail) ──
+
+    [Fact]
+    public void HorizontalPath_IsReversible()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+
+            // Lock H: Window → (230, 150).
+            window.HandleDragMove(new System.Drawing.Point(530, 502), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(230, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // Add vertical mouse displacement: stays H. Top stays at originTop.
+            window.HandleDragMove(new System.Drawing.Point(540, 510), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(240, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // Mouse returns along X: Window → (220, 150). No drift.
+            window.HandleDragMove(new System.Drawing.Point(520, 500), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(220, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+        });
+    }
+
+    // ── 11. Release Shift → immediate free drag ──
+
+    [Fact]
+    public void ReleaseShift_ImmediateFreeDrag()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+            // Lock H: Window → (230, 150).
+            window.HandleDragMove(new System.Drawing.Point(530, 502), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+
+            // Continue H: Window → (240, 150).
+            window.HandleDragMove(new System.Drawing.Point(540, 502), shiftHeld: true);
+
+            // Release Shift: transition re-anchors. Window stays (240, 150).
+            window.HandleDragMove(new System.Drawing.Point(543, 504), shiftHeld: false);
+            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
+
+            // Free drag: dx=12, dy=16 from new origin (543,504).
+            // target = (240+12, 150+16) = (252, 166).
+            window.HandleDragMove(new System.Drawing.Point(555, 520), shiftHeld: false);
+            var last = LastMove(interop);
+            Assert.Equal(252, last.X);
+            Assert.Equal(166, last.Y);
+        });
+    }
+
+    // ── 12. Shift press/release transitions don't move; H lock then release ──
+
+    [Fact]
+    public void ShiftPressRelease_NoMove_ThenFreeDrag()
     {
         WpfTestHelpers.RunInStaWithWpf(() =>
         {
             var (window, interop) = CreateWindow();
 
             window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: false);
-            window.HandleDragMove(new System.Drawing.Point(530, 510), shiftHeld: false);
-            int moveCountBefore = interop.MoveCalls.Count;
-            int leftBefore = interop.CurrentRect.Left;
-            int topBefore = interop.CurrentRect.Top;
+            // Free drag: Window → (220, 160).
+            window.HandleDragMove(new System.Drawing.Point(520, 510), shiftHeld: false);
 
-            // Press Shift mid-drag.
-            window.HandleDragMove(new System.Drawing.Point(535, 513), shiftHeld: true);
+            // Press Shift — transition, no move.
+            int leftBeforePress = interop.CurrentRect.Left;
+            int topBeforePress = interop.CurrentRect.Top;
+            window.HandleDragMove(new System.Drawing.Point(525, 513), shiftHeld: true);
+            Assert.Equal(leftBeforePress, interop.CurrentRect.Left);
+            Assert.Equal(topBeforePress, interop.CurrentRect.Top);
 
-            // No new move call on transition — window position unchanged.
-            Assert.Equal(moveCountBefore, interop.MoveCalls.Count);
-            Assert.Equal(leftBefore, interop.CurrentRect.Left);
-            Assert.Equal(topBefore, interop.CurrentRect.Top);
+            // Lock H: dx=20, dy=0 from origin (525,513). dominance=1 → H.
+            // target = (220+20, 160) = (240, 160). Top is originTop = 160.
+            window.HandleDragMove(new System.Drawing.Point(545, 513), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(240, interop.CurrentRect.Left);
+            Assert.Equal(160, interop.CurrentRect.Top);
+
+            // Continue H: Window → (250, 160).
+            window.HandleDragMove(new System.Drawing.Point(555, 513), shiftHeld: true);
+            Assert.Equal(250, interop.CurrentRect.Left);
+            Assert.Equal(160, interop.CurrentRect.Top);
+
+            // Release Shift — transition, no move.
+            int leftBeforeRelease = interop.CurrentRect.Left;
+            int topBeforeRelease = interop.CurrentRect.Top;
+            window.HandleDragMove(new System.Drawing.Point(557, 515), shiftHeld: false);
+            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
+            Assert.Equal(leftBeforeRelease, interop.CurrentRect.Left);
+            Assert.Equal(topBeforeRelease, interop.CurrentRect.Top);
+
+            // Free drag: dx=13, dy=5 from origin (557,515).
+            // target = (250+13, 160+5) = (263, 165).
+            window.HandleDragMove(new System.Drawing.Point(570, 520), shiftHeld: false);
+            Assert.Equal(263, interop.CurrentRect.Left);
+            Assert.Equal(165, interop.CurrentRect.Top);
         });
     }
 
-    // ── 4. Free drag → press Shift → horizontal lock ──
+    // ── 13. Free drag then Shift still works ──
 
     [Fact]
     public void FreeDrag_ThenShift_HorizontalLock()
     {
         WpfTestHelpers.RunInStaWithWpf(() =>
         {
-            var (window, interop) = CreateWindow();
+            var (window, _) = CreateWindow();
 
             window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: false);
-            // Free drag.
             window.HandleDragMove(new System.Drawing.Point(530, 510), shiftHeld: false);
 
-            // Press Shift (transition — no move).
+            // Press Shift (transition — no move, re-anchor).
             window.HandleDragMove(new System.Drawing.Point(535, 513), shiftHeld: true);
 
-            // Move horizontally — should lock horizontal.
-            window.HandleDragMove(new System.Drawing.Point(570, 515), shiftHeld: true);
-
+            // Move horizontally — lock horizontal.
+            // (560, 515): dx=25, dy=2 from origin (535,513). dominance ≈ 0.852 → H.
+            window.HandleDragMove(new System.Drawing.Point(560, 515), shiftHeld: true);
             Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
-            // Anchor was re-established at (535, 513) → window (230, 160).
-            // delta = (570-535, 515-513) = (35, 2). Free pos = (265, 162).
-            // Frozen Top = 162. Window = (265, 162).
-            var last = LastMove(interop);
-            Assert.Equal(265, last.X);
-            Assert.Equal(162, last.Y);
         });
     }
 
-    // ── 5. Free drag → press Shift → vertical lock ──
+    // ── 14. Near-diagonal small movement: essentially free, not locked ──
 
     [Fact]
-    public void FreeDrag_ThenShift_VerticalLock()
-    {
-        WpfTestHelpers.RunInStaWithWpf(() =>
-        {
-            var (window, interop) = CreateWindow();
-
-            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: false);
-            window.HandleDragMove(new System.Drawing.Point(510, 530), shiftHeld: false);
-
-            // Press Shift (transition — no move).
-            window.HandleDragMove(new System.Drawing.Point(513, 535), shiftHeld: true);
-
-            // Move vertically — should lock vertical.
-            window.HandleDragMove(new System.Drawing.Point(515, 570), shiftHeld: true);
-
-            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
-            // Anchor at (513, 535) → window (210, 180).
-            // delta = (515-513, 570-535) = (2, 35). Free pos = (212, 215).
-            // Frozen Left = 212. Window = (212, 215).
-            var last = LastMove(interop);
-            Assert.Equal(212, last.X);
-            Assert.Equal(215, last.Y);
-        });
-    }
-
-    // ── 6. Horizontal lock → release Shift → free drag ──
-
-    [Fact]
-    public void HorizontalLock_ReleaseShift_FreeDragBothAxes()
+    public void NearDiagonalSmallMovement_EssentiallyFree()
     {
         WpfTestHelpers.RunInStaWithWpf(() =>
         {
             var (window, interop) = CreateWindow();
 
             window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(560, 503), shiftHeld: true);
-            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
-
-            // Release Shift (transition — no move, re-anchor).
-            window.HandleDragMove(new System.Drawing.Point(565, 506), shiftHeld: false);
-            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
-
-            // Free drag — both X and Y must change.
-            window.HandleDragMove(new System.Drawing.Point(575, 520), shiftHeld: false);
-            var last = LastMove(interop);
-            // Anchor at (565, 506) → window (260, 153).
-            // delta = (10, 14). Window = (270, 167).
-            Assert.Equal(270, last.X);
-            Assert.Equal(167, last.Y);
-        });
-    }
-
-    // ── 7. Vertical lock → release Shift → free drag ──
-
-    [Fact]
-    public void VerticalLock_ReleaseShift_FreeDragBothAxes()
-    {
-        WpfTestHelpers.RunInStaWithWpf(() =>
-        {
-            var (window, interop) = CreateWindow();
-
-            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(503, 560), shiftHeld: true);
-            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
-
-            // Release Shift (transition — no move, re-anchor).
-            window.HandleDragMove(new System.Drawing.Point(506, 565), shiftHeld: false);
-            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
-
-            // Free drag — both X and Y must change.
-            window.HandleDragMove(new System.Drawing.Point(520, 580), shiftHeld: false);
-            var last = LastMove(interop);
-            // Anchor at (506, 565) → window (203, 210).
-            // delta = (14, 15). Window = (217, 225).
-            Assert.Equal(217, last.X);
-            Assert.Equal(225, last.Y);
-        });
-    }
-
-    // ── 8. Horizontal lock → release Shift → press Shift → vertical lock ──
-
-    [Fact]
-    public void HorizontalLock_ReleaseShift_PressShift_VerticalLock()
-    {
-        WpfTestHelpers.RunInStaWithWpf(() =>
-        {
-            var (window, interop) = CreateWindow();
-
-            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(560, 503), shiftHeld: true);
-            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
-
-            // Release Shift.
-            window.HandleDragMove(new System.Drawing.Point(565, 506), shiftHeld: false);
-            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
-
-            // Press Shift again (transition — re-anchor at current pos).
-            window.HandleDragMove(new System.Drawing.Point(567, 508), shiftHeld: true);
-
-            // Move vertically — should lock vertical.
-            window.HandleDragMove(new System.Drawing.Point(567, 560), shiftHeld: true);
-            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
-
-            // Anchor at (567, 508) → window (260, 153).
-            // delta = (0, 52). Free pos = (260, 205). Frozen Left = 260.
-            var last = LastMove(interop);
-            Assert.Equal(260, last.X);
-            Assert.Equal(205, last.Y);
-        });
-    }
-
-    // ── 9. Vertical lock → release Shift → press Shift → horizontal lock ──
-
-    [Fact]
-    public void VerticalLock_ReleaseShift_PressShift_HorizontalLock()
-    {
-        WpfTestHelpers.RunInStaWithWpf(() =>
-        {
-            var (window, interop) = CreateWindow();
-
-            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(503, 560), shiftHeld: true);
-            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
-
-            // Release Shift.
-            window.HandleDragMove(new System.Drawing.Point(506, 565), shiftHeld: false);
-            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
-
-            // Press Shift again.
-            window.HandleDragMove(new System.Drawing.Point(508, 567), shiftHeld: true);
-
-            // Move horizontally — should lock horizontal.
-            window.HandleDragMove(new System.Drawing.Point(560, 567), shiftHeld: true);
-            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
-
-            // Anchor at (508, 567) → window (203, 210).
-            // delta = (52, 0). Free pos = (255, 210). Frozen Top = 210.
-            var last = LastMove(interop);
-            Assert.Equal(255, last.X);
-            Assert.Equal(210, last.Y);
-        });
-    }
-
-    // ── 10. Multiple Shift press/release, no jumps ──
-
-    [Fact]
-    public void MultipleShiftToggles_NoJumps()
-    {
-        WpfTestHelpers.RunInStaWithWpf(() =>
-        {
-            var (window, interop) = CreateWindow();
-
-            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: false);
-            window.HandleDragMove(new System.Drawing.Point(520, 510), shiftHeld: false);
-            // Window at (220, 160).
-
-            // Toggle Shift on.
-            window.HandleDragMove(new System.Drawing.Point(525, 513), shiftHeld: true);
-            int leftAfterPress = interop.CurrentRect.Left;
-            int topAfterPress = interop.CurrentRect.Top;
-
-            // Toggle Shift off.
-            window.HandleDragMove(new System.Drawing.Point(528, 516), shiftHeld: false);
-            Assert.Equal(leftAfterPress, interop.CurrentRect.Left);
-            Assert.Equal(topAfterPress, interop.CurrentRect.Top);
-
-            // Toggle Shift on again.
-            window.HandleDragMove(new System.Drawing.Point(530, 518), shiftHeld: true);
-            Assert.Equal(leftAfterPress, interop.CurrentRect.Left);
-            Assert.Equal(topAfterPress, interop.CurrentRect.Top);
-
-            // Toggle Shift off again.
-            window.HandleDragMove(new System.Drawing.Point(532, 520), shiftHeld: false);
-            Assert.Equal(leftAfterPress, interop.CurrentRect.Left);
-            Assert.Equal(topAfterPress, interop.CurrentRect.Top);
-        });
-    }
-
-    // ── 11. Multiple Shift press/release, no duplicate DragCompleted ──
-
-    [Fact]
-    public void MultipleShiftToggles_NoDuplicateDragCompleted()
-    {
-        WpfTestHelpers.RunInStaWithWpf(() =>
-        {
-            var (window, _) = CreateWindow();
-            int dragCompletedCalls = 0;
-            window.DragCompleted += (_, _) => dragCompletedCalls++;
-
-            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: false);
-            window.HandleDragMove(new System.Drawing.Point(520, 510), shiftHeld: false);
-            window.HandleDragMove(new System.Drawing.Point(525, 513), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(530, 515), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(535, 518), shiftHeld: false);
-            window.HandleDragMove(new System.Drawing.Point(540, 520), shiftHeld: true);
-            window.EndDrag();
-
-            Assert.Equal(1, dragCompletedCalls);
-        });
-    }
-
-    // ── Below threshold with Shift: free drag ──
-
-    [Fact]
-    public void ShiftHeld_BelowThreshold_FreeDragStillMoves()
-    {
-        WpfTestHelpers.RunInStaWithWpf(() =>
-        {
-            var (window, interop) = CreateWindow();
-
-            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(502, 501), shiftHeld: true);
+            // (503, 502): both movement and directional lead are below the
+            // physical thresholds, so the window follows the cursor freely.
+            window.HandleDragMove(new System.Drawing.Point(503, 502), shiftHeld: true);
 
             Assert.False(window.IsAxisLocked);
-            Assert.Equal(202, LastMove(interop).X);
-            Assert.Equal(151, LastMove(interop).Y);
+            Assert.Equal(203, LastMove(interop).X);
+            Assert.Equal(152, LastMove(interop).Y);
         });
     }
 
-    // ── Equal displacement locks vertical ──
-
-    [Fact]
-    public void EqualDisplacement_LocksVertical()
-    {
-        WpfTestHelpers.RunInStaWithWpf(() =>
-        {
-            var (window, interop) = CreateWindow();
-
-            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(510, 510), shiftHeld: true);
-
-            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
-            var last = LastMove(interop);
-            // Free pos = (210, 160). Frozen Left = 210.
-            Assert.Equal(210, last.X);
-            Assert.Equal(160, last.Y);
-        });
-    }
-
-    // ── No Shift: free drag ──
+    // ── 15. No Shift: free drag ──
 
     [Fact]
     public void NoShift_FreeDrag_WindowFollowsMouse()
@@ -492,51 +877,47 @@ public class OverlayWindowAxisDragTests
         });
     }
 
-    // ── Direction persists while Shift held ──
+    // ── 16. DragCompleted fires exactly once ──
 
     [Fact]
-    public void DirectionLocked_ShiftStillHeld_StaysLocked()
+    public void DragCompleted_FiresOnce()
     {
         WpfTestHelpers.RunInStaWithWpf(() =>
         {
-            var (window, interop) = CreateWindow();
-
-            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(560, 503), shiftHeld: true);
-            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
-
-            // Continue with Shift held — direction must persist.
-            window.HandleDragMove(new System.Drawing.Point(580, 510), shiftHeld: true);
-
-            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
-            var last = LastMove(interop);
-            Assert.Equal(280, last.X);
-            Assert.Equal(153, last.Y); // still frozen
-        });
-    }
-
-    // ── EndDrag fires DragCompleted once ──
-
-    [Fact]
-    public void EndDrag_FiresDragCompletedOnceWithFinalPhysicalCoords()
-    {
-        WpfTestHelpers.RunInStaWithWpf(() =>
-        {
-            var (window, interop) = CreateWindow();
+            var (window, _) = CreateWindow();
             int dragCompletedCalls = 0;
-            double savedLeft = 0, savedTop = 0;
-            window.DragCompleted += (l, t) => { dragCompletedCalls++; savedLeft = l; savedTop = t; };
+            window.DragCompleted += (_, _) => dragCompletedCalls++;
 
             window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(560, 503), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(540, 502), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(550, 560), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(620, 565), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(625, 570), shiftHeld: false);
+            window.HandleDragMove(new System.Drawing.Point(627, 572), shiftHeld: true);
             window.EndDrag();
 
             Assert.Equal(1, dragCompletedCalls);
-            Assert.Equal(260.0, savedLeft);
-            Assert.Equal(153.0, savedTop);
+        });
+    }
+
+    // ── 17. EndDrag fires DragCompleted once ──
+
+    [Fact]
+    public void EndDrag_FiresDragCompletedOnce()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, _) = CreateWindow();
+            int dragCompletedCalls = 0;
+            window.DragCompleted += (_, _) => dragCompletedCalls++;
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(530, 502), shiftHeld: true);
+            window.EndDrag();
+
+            Assert.Equal(1, dragCompletedCalls);
             Assert.False(window.IsDragging);
 
-            // Second EndDrag is a no-op.
             window.EndDrag();
             Assert.Equal(1, dragCompletedCalls);
         });
@@ -575,7 +956,7 @@ public class OverlayWindowAxisDragTests
         });
     }
 
-    // ── CancelDrag cleans state without DragCompleted ──
+    // ── 18. CancelDrag cleans state without DragCompleted ──
 
     [Fact]
     public void CancelDrag_CleansStateWithoutFiringDragCompleted()
@@ -587,14 +968,13 @@ public class OverlayWindowAxisDragTests
             window.DragCompleted += (_, _) => dragCompletedCalls++;
 
             window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(560, 503), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(530, 502), shiftHeld: true);
 
             window.CancelDrag();
 
             Assert.False(window.IsDragging);
             Assert.Equal(0, dragCompletedCalls);
 
-            // Subsequent EndDrag must not fire DragCompleted either.
             window.EndDrag();
             Assert.Equal(0, dragCompletedCalls);
         });
@@ -616,10 +996,10 @@ public class OverlayWindowAxisDragTests
         });
     }
 
-    // ── Size preservation ──
+    // ── 19. Size preservation ──
 
     [Fact]
-    public void AxisDragMove_PreservesWindowSizeViaNosizeFlag()
+    public void AxisDragMove_PreservesWindowSize()
     {
         WpfTestHelpers.RunInStaWithWpf(() =>
         {
@@ -628,7 +1008,8 @@ public class OverlayWindowAxisDragTests
             int originalHeight = interop.CurrentRect.Bottom - interop.CurrentRect.Top;
 
             window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(700, 503), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(530, 502), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(560, 502), shiftHeld: true);
 
             int width = interop.CurrentRect.Right - interop.CurrentRect.Left;
             int height = interop.CurrentRect.Bottom - interop.CurrentRect.Top;
@@ -637,7 +1018,7 @@ public class OverlayWindowAxisDragTests
         });
     }
 
-    // ── SetWindowPos flags ──
+    // ── 20. SetWindowPos flags ──
 
     [Fact]
     public void AxisDragMove_PreservesTopmostAndNoActivateFlags()
@@ -647,7 +1028,8 @@ public class OverlayWindowAxisDragTests
             var (window, interop) = CreateWindow();
 
             window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
-            window.HandleDragMove(new System.Drawing.Point(560, 503), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(530, 502), shiftHeld: true);
+            window.HandleDragMove(new System.Drawing.Point(560, 502), shiftHeld: true);
 
             var last = LastMove(interop);
             Assert.True((last.Flags & SWP_NOSIZE) != 0);
@@ -656,7 +1038,7 @@ public class OverlayWindowAxisDragTests
         });
     }
 
-    // ── Locked prevents drag ──
+    // ── 21. Locked prevents drag ──
 
     [Fact]
     public void Locked_PreventsDragStart()
