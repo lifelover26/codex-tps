@@ -738,7 +738,7 @@ public class OverlayWindowAxisDragTests
         });
     }
 
-    // ── 11. Release Shift → immediate free drag ──
+    // ── 11. Release Shift → immediate free drag from the original origin ──
 
     [Fact]
     public void ReleaseShift_ImmediateFreeDrag()
@@ -754,24 +754,29 @@ public class OverlayWindowAxisDragTests
 
             // Continue H: Window → (240, 150).
             window.HandleDragMove(new System.Drawing.Point(540, 502), shiftHeld: true);
+            Assert.Equal(240, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
 
-            // Release Shift: transition re-anchors. Window stays (240, 150).
+            // Release Shift: the transition frame is processed with the new
+            // state. The origin is NOT re-anchored, so the window immediately
+            // jumps to origin + total dx/dy = (200+43, 150+4) = (243, 154).
             window.HandleDragMove(new System.Drawing.Point(543, 504), shiftHeld: false);
             Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
+            Assert.Equal(243, interop.CurrentRect.Left);
+            Assert.Equal(154, interop.CurrentRect.Top);
 
-            // Free drag: dx=12, dy=16 from new origin (543,504).
-            // target = (240+12, 150+16) = (252, 166).
+            // Free drag continues from the same mouse-down origin, not from the
+            // release position: (200+55, 150+20) = (255, 170).
             window.HandleDragMove(new System.Drawing.Point(555, 520), shiftHeld: false);
-            var last = LastMove(interop);
-            Assert.Equal(252, last.X);
-            Assert.Equal(166, last.Y);
+            Assert.Equal(255, interop.CurrentRect.Left);
+            Assert.Equal(170, interop.CurrentRect.Top);
         });
     }
 
-    // ── 12. Shift press/release transitions don't move; H lock then release ──
+    // ── 12. Press/release Shift uses the mouse-down origin throughout ──
 
     [Fact]
-    public void ShiftPressRelease_NoMove_ThenFreeDrag()
+    public void ShiftPressRelease_UsesOriginalOriginThroughout()
     {
         WpfTestHelpers.RunInStaWithWpf(() =>
         {
@@ -780,43 +785,46 @@ public class OverlayWindowAxisDragTests
             window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: false);
             // Free drag: Window → (220, 160).
             window.HandleDragMove(new System.Drawing.Point(520, 510), shiftHeld: false);
+            Assert.Equal(220, interop.CurrentRect.Left);
+            Assert.Equal(160, interop.CurrentRect.Top);
 
-            // Press Shift — transition, no move.
-            int leftBeforePress = interop.CurrentRect.Left;
-            int topBeforePress = interop.CurrentRect.Top;
+            // Press Shift — the transition frame is processed (no re-anchor).
+            // dx=25, dy=13 from the mouse-down origin (500,500). Horizontal
+            // leads by 12px, partway through the 8..20px blend, so the window
+            // moves to (225, 160) with axis still None.
             window.HandleDragMove(new System.Drawing.Point(525, 513), shiftHeld: true);
-            Assert.Equal(leftBeforePress, interop.CurrentRect.Left);
-            Assert.Equal(topBeforePress, interop.CurrentRect.Top);
+            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
+            Assert.Equal(225, interop.CurrentRect.Left);
+            Assert.Equal(160, interop.CurrentRect.Top);
 
-            // Lock H: dx=20, dy=0 from origin (525,513). dominance=1 → H.
-            // target = (220+20, 160) = (240, 160). Top is originTop = 160.
+            // Lock H: dx=45, dy=13 from the mouse-down origin. Horizontal leads
+            // by 32px → full H rail through the original Top=150.
+            // target = (200+45, 150) = (245, 150).
             window.HandleDragMove(new System.Drawing.Point(545, 513), shiftHeld: true);
             Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
-            Assert.Equal(240, interop.CurrentRect.Left);
-            Assert.Equal(160, interop.CurrentRect.Top);
+            Assert.Equal(245, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
 
-            // Continue H: Window → (250, 160).
+            // Continue H: Window → (255, 150).
             window.HandleDragMove(new System.Drawing.Point(555, 513), shiftHeld: true);
-            Assert.Equal(250, interop.CurrentRect.Left);
-            Assert.Equal(160, interop.CurrentRect.Top);
+            Assert.Equal(255, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
 
-            // Release Shift — transition, no move.
-            int leftBeforeRelease = interop.CurrentRect.Left;
-            int topBeforeRelease = interop.CurrentRect.Top;
+            // Release Shift — transition frame processed, origin untouched.
+            // Free drag from mouse-down origin: (200+57, 150+15) = (257, 165).
             window.HandleDragMove(new System.Drawing.Point(557, 515), shiftHeld: false);
             Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
-            Assert.Equal(leftBeforeRelease, interop.CurrentRect.Left);
-            Assert.Equal(topBeforeRelease, interop.CurrentRect.Top);
-
-            // Free drag: dx=13, dy=5 from origin (557,515).
-            // target = (250+13, 160+5) = (263, 165).
-            window.HandleDragMove(new System.Drawing.Point(570, 520), shiftHeld: false);
-            Assert.Equal(263, interop.CurrentRect.Left);
+            Assert.Equal(257, interop.CurrentRect.Left);
             Assert.Equal(165, interop.CurrentRect.Top);
+
+            // Free drag continues from the mouse-down origin: (200+70, 150+20) = (270, 170).
+            window.HandleDragMove(new System.Drawing.Point(570, 520), shiftHeld: false);
+            Assert.Equal(270, interop.CurrentRect.Left);
+            Assert.Equal(170, interop.CurrentRect.Top);
         });
     }
 
-    // ── 13. Free drag then Shift still works ──
+    // ── 13. Free drag then Shift still works (origin stays at mouse-down) ──
 
     [Fact]
     public void FreeDrag_ThenShift_HorizontalLock()
@@ -828,13 +836,191 @@ public class OverlayWindowAxisDragTests
             window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: false);
             window.HandleDragMove(new System.Drawing.Point(530, 510), shiftHeld: false);
 
-            // Press Shift (transition — no move, re-anchor).
+            // Press Shift — transition frame is processed against the mouse-down
+            // origin (no re-anchor). dx=35, dy=13 → horizontal rail.
             window.HandleDragMove(new System.Drawing.Point(535, 513), shiftHeld: true);
 
             // Move horizontally — lock horizontal.
-            // (560, 515): dx=25, dy=2 from origin (535,513). dominance ≈ 0.852 → H.
+            // (560, 515): dx=60, dy=15 from the mouse-down origin. H rail.
             window.HandleDragMove(new System.Drawing.Point(560, 515), shiftHeld: true);
             Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+        });
+    }
+
+    // ── 13a. Free drag then press Shift uses the mouse-down origin ──
+
+    [Fact]
+    public void FreeDrag_ThenPressShift_UsesOriginalMouseDownOrigin()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            // Initial window (200, 150). Mouse down at (500, 500), no Shift.
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: false);
+
+            // Free drag to (530, 510): Window → (230, 160).
+            window.HandleDragMove(new System.Drawing.Point(530, 510), shiftHeld: false);
+            Assert.Equal(230, interop.CurrentRect.Left);
+            Assert.Equal(160, interop.CurrentRect.Top);
+
+            // Press Shift at (535, 513): dx=35, dy=13 from the mouse-down origin.
+            // Horizontal leads by 22px → full H rail through the ORIGINAL Top=150,
+            // not the press-time Top=160. Window → (235, 150).
+            window.HandleDragMove(new System.Drawing.Point(535, 513), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(235, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+        });
+    }
+
+    // ── 13b. Release Shift restores free drag from the original origin ──
+
+    [Fact]
+    public void ReleaseShift_RestoresFreeDragFromOriginalOrigin()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+
+            // H lock: Window → (240, 150).
+            window.HandleDragMove(new System.Drawing.Point(540, 502), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(240, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // Continue H: Window → (260, 150).
+            window.HandleDragMove(new System.Drawing.Point(560, 502), shiftHeld: true);
+            Assert.Equal(260, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // Release Shift at (565, 510): the current frame immediately restores
+            // free drag from the mouse-down origin — NOT accumulated from (260, 150).
+            // target = (200+65, 150+10) = (265, 160).
+            window.HandleDragMove(new System.Drawing.Point(565, 510), shiftHeld: false);
+            Assert.Equal(AxisLockDirection.None, window.CurrentAxisLockDirection);
+            Assert.Equal(265, interop.CurrentRect.Left);
+            Assert.Equal(160, interop.CurrentRect.Top);
+
+            // Continue free drag: still from the mouse-down origin.
+            // (570, 520) → (200+70, 150+20) = (270, 170).
+            window.HandleDragMove(new System.Drawing.Point(570, 520), shiftHeld: false);
+            Assert.Equal(270, interop.CurrentRect.Left);
+            Assert.Equal(170, interop.CurrentRect.Top);
+        });
+    }
+
+    // ── 13c. Release then press Shift re-evaluates axis from the original origin ──
+
+    [Fact]
+    public void ReleaseThenPressShift_ReevaluatesAxisFromOriginalOrigin()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: true);
+
+            // H lock: Window → (240, 150).
+            window.HandleDragMove(new System.Drawing.Point(540, 502), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+
+            // Release Shift and free-move to a vertical-dominant total displacement.
+            // (545, 510) → (245, 160); (510, 600) → (210, 250).
+            window.HandleDragMove(new System.Drawing.Point(545, 510), shiftHeld: false);
+            Assert.Equal(245, interop.CurrentRect.Left);
+            Assert.Equal(160, interop.CurrentRect.Top);
+            window.HandleDragMove(new System.Drawing.Point(510, 600), shiftHeld: false);
+            Assert.Equal(210, interop.CurrentRect.Left);
+            Assert.Equal(250, interop.CurrentRect.Top);
+
+            // Press Shift at (510, 600): dx=10, dy=100 from the mouse-down origin.
+            // Vertical leads by 90px → full V rail through the ORIGINAL Left=200.
+            // target = (200, 150+100) = (200, 250).
+            window.HandleDragMove(new System.Drawing.Point(510, 600), shiftHeld: true);
+            Assert.Equal(AxisLockDirection.Vertical, window.CurrentAxisLockDirection);
+            Assert.Equal(200, interop.CurrentRect.Left);
+            Assert.Equal(250, interop.CurrentRect.Top);
+        });
+    }
+
+    // ── 13d. Repeated Shift toggles do not change the drag origin ──
+
+    [Fact]
+    public void RepeatedShiftToggles_DoNotChangeDragOrigin()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: false);
+
+            // Free drag: Window → (230, 160).
+            window.HandleDragMove(new System.Drawing.Point(530, 510), shiftHeld: false);
+
+            // Press Shift at (540, 520): dx=40, dy=20 → H rail. Window → (240, 150).
+            window.HandleDragMove(new System.Drawing.Point(540, 520), shiftHeld: true);
+            Assert.Equal(240, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // Release Shift at (550, 530): free drag from origin. Window → (250, 180).
+            window.HandleDragMove(new System.Drawing.Point(550, 530), shiftHeld: false);
+            Assert.Equal(250, interop.CurrentRect.Left);
+            Assert.Equal(180, interop.CurrentRect.Top);
+
+            // Press Shift at (560, 540): dx=60, dy=40 → H rail. Window → (260, 150).
+            window.HandleDragMove(new System.Drawing.Point(560, 540), shiftHeld: true);
+            Assert.Equal(260, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // Release Shift at (570, 550): free drag. Window → (270, 200).
+            window.HandleDragMove(new System.Drawing.Point(570, 550), shiftHeld: false);
+            Assert.Equal(270, interop.CurrentRect.Left);
+            Assert.Equal(200, interop.CurrentRect.Top);
+
+            // Press Shift at (580, 560): dx=80, dy=60 → H rail. Window → (280, 150).
+            window.HandleDragMove(new System.Drawing.Point(580, 560), shiftHeld: true);
+            Assert.Equal(280, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+
+            // Release Shift at (590, 570): free drag. Window → (290, 220).
+            window.HandleDragMove(new System.Drawing.Point(590, 570), shiftHeld: false);
+            Assert.Equal(290, interop.CurrentRect.Left);
+            Assert.Equal(220, interop.CurrentRect.Top);
+
+            // Cursor returns exactly to the mouse-down coordinate: Window must
+            // return exactly to the original (200, 150) — no accumulated drift.
+            window.HandleDragMove(new System.Drawing.Point(500, 500), shiftHeld: false);
+            Assert.Equal(200, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
+        });
+    }
+
+    // ── 13e. The Shift transition frame is processed, not skipped ──
+
+    [Fact]
+    public void ShiftTransitionFrame_IsProcessed()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var (window, interop) = CreateWindow();
+
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(500, 500), shiftHeld: false);
+
+            // Free drag: Window → (230, 160). One move recorded.
+            window.HandleDragMove(new System.Drawing.Point(530, 510), shiftHeld: false);
+            Assert.Single(interop.MoveCalls);
+
+            // Press Shift at (540, 520): this transition frame must NOT be a
+            // no-op return. dx=40, dy=20 → H rail. Window → (240, 150).
+            int movesBeforeTransition = interop.MoveCalls.Count;
+            window.HandleDragMove(new System.Drawing.Point(540, 520), shiftHeld: true);
+            Assert.Equal(movesBeforeTransition + 1, interop.MoveCalls.Count);
+            Assert.Equal(AxisLockDirection.Horizontal, window.CurrentAxisLockDirection);
+            Assert.Equal(240, interop.CurrentRect.Left);
+            Assert.Equal(150, interop.CurrentRect.Top);
         });
     }
 

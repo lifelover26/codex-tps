@@ -39,20 +39,22 @@ public partial class OverlayWindow : Window
     private bool _isDragging;
     // Pure origin-absolute projection drag state. The window position is always
     // computed as an absolute projection from the immutable drag origin — never
-    // accumulated frame-by-frame, never re-anchored on axis changes.
+    // accumulated frame-by-frame, never re-anchored on axis or Shift changes.
     //
     // 1. dragOriginMouse / dragOriginWindowLeft/Top: the mouse and window
-    //    position at mouse-down or Shift state transition. This is IMMUTABLE
-    //    during a single Shift-drag — axis switching never overwrites it.
-    //    All displacement (dx/dy) is relative to this origin.
+    //    position recorded at mouse-down. This is the origin of the ENTIRE
+    //    drag gesture and is IMMUTABLE from mouse-down until EndDrag/CancelDrag.
+    //    Shift presses, releases, or repeated toggles never recompute it.
+    //    All displacement (dx/dy) is relative to this single origin.
     //
-    // 2. currentAxis: None, Horizontal, or Vertical. The calculator produces
-    //    this state and the matching coordinates together. A short fixed-pixel
+    // 2. currentAxis: None, Horizontal, or Vertical. A Shift state transition
+    //    resets this to None so the next frame re-enters the calculator from a
+    //    neutral state, but the origin is untouched. The calculator produces
+    //    the direction and matching coordinates together. A short fixed-pixel
     //    blend is used only while entering or changing rails.
     //
-    // Because the origin never changes during a Shift drag, the cursor
-    // returning to the origin always produces the original window position —
-    // no drift, ever.
+    // Because the origin never changes during a gesture, the cursor returning
+    // to it always produces the original window position — no drift, ever.
     private System.Drawing.Point _dragOriginMouse;
     private int _dragOriginWindowLeft;
     private int _dragOriginWindowTop;
@@ -584,12 +586,15 @@ public partial class OverlayWindow : Window
     /// <summary>
     /// Unified move handler using pure origin-absolute projection. All target
     /// coordinates are computed as absolute projections from the immutable drag
-    /// origin — never accumulated frame-by-frame, never re-anchored on axis
-    /// changes. While Shift is held, a strong direction is projected onto a
-    /// hard horizontal or vertical rail. Crossing the opposite-axis margin
-    /// uses one short fixed-pixel blend between the two origin-based rails.
-    /// Because the calculator returns state and coordinates together and the
-    /// origin never changes, returning to it cannot accumulate drift.
+    /// origin — never accumulated frame-by-frame, never re-anchored on axis or
+    /// Shift state changes. A Shift press/release only resets the axis state to
+    /// None and then continues processing the same frame; the origin stays at
+    /// mouse-down for the whole gesture. While Shift is held, a strong direction
+    /// is projected onto a hard horizontal or vertical rail. Crossing the
+    /// opposite-axis margin uses one short fixed-pixel blend between the two
+    /// origin-based rails. Because the calculator returns state and coordinates
+    /// together and the origin never changes, returning to it cannot accumulate
+    /// drift.
     /// </summary>
     internal void HandleDragMove(System.Drawing.Point mouseScreen, bool shiftHeld)
     {
@@ -600,15 +605,14 @@ public partial class OverlayWindow : Window
         if (hwnd == IntPtr.Zero)
             return;
 
-        // Detect Shift state transitions. Re-anchor the drag origin to the
-        // current mouse and window position so the transition produces no move.
-        // This starts a new Shift drag segment with a fresh origin.
+        // Detect Shift state transitions. Reset the axis state so the next
+        // projection re-enters from a neutral direction, but DO NOT re-anchor
+        // the drag origin — it stays at the mouse-down position for the whole
+        // gesture. Fall through and process this frame with the new state.
         if (shiftHeld != _previousShiftHeld)
         {
             _previousShiftHeld = shiftHeld;
             _currentAxis = AxisLockDirection.None;
-            SyncDragOrigin(hwnd, mouseScreen);
-            return;
         }
 
         // Absolute displacement from the immutable drag origin.
@@ -634,24 +638,6 @@ public partial class OverlayWindow : Window
         _currentAxis = projection.Direction;
 
         MoveWindowTo(hwnd, projection.Left, projection.Top);
-    }
-
-    /// <summary>
-    /// Re-anchors the immutable drag origin to the current mouse and window
-    /// position without moving the window. Used on Shift state transitions so
-    /// the next MouseMove starts a fresh projection from the current position.
-    /// The window rect is read from GetWindowRect here because this is a state
-    /// transition (not a per-frame move) — the readback establishes the new
-    /// origin, not an accumulation base.
-    /// </summary>
-    private void SyncDragOrigin(IntPtr hwnd, System.Drawing.Point mouseScreen)
-    {
-        if (_native.GetWindowRect(hwnd, out RECT rect))
-        {
-            _dragOriginWindowLeft = rect.Left;
-            _dragOriginWindowTop = rect.Top;
-        }
-        _dragOriginMouse = mouseScreen;
     }
 
     /// <summary>
