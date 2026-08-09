@@ -39,6 +39,8 @@ Codex TPS for Windows reads the usage events already written to local Codex
 session logs and turns them into an at-a-glance throughput display. It does not
 require an API key and does not upload conversation data.
 
+**What's new in v0.3.8:** Shift-dragging now keeps the initial mouse-down position as the fixed origin for the entire drag gesture. Pressing, releasing, or pressing Shift again no longer re-anchors the overlay; each Shift press chooses the axis from the total displacement since drag start. Smooth threshold-based axis switching is preserved without accumulated drift.
+
 **What's new in v0.3.7:** Fixed occasional 1px black edges on the Metrics panel at fractional DPI scales. The panel now uses pixel-aligned layout while preserving its fixed 390 DIP width.
 
 **What's new in v0.3.6:** Shift-dragging the unlocked overlay now uses a fixed-origin, threshold-based axis lock. Holding Shift allows smooth horizontal/vertical transitions without accumulated drift; releasing Shift immediately restores free dragging.
@@ -145,6 +147,8 @@ troubleshooting, removal, and release packaging.
 Codex TPS for Windows 是一款 Windows 11 托盘工具。它读取 Codex 已写入
 本机的会话用量记录，显示不同时间窗口内的 token 吞吐率。程序本身不需要
 API Key，也不会上传对话内容。
+
+**v0.3.8 更新：** Shift 拖动现在会在整个拖动手势中始终使用最初按下鼠标时的位置作为固定原点。按下、松开或再次按下 Shift 都不会重新锚定悬浮窗；每次按下 Shift 都会根据自拖动开始以来的总位移选择轴向，并保留平滑的阈值换轴手感且不会累积漂移。
 
 **v0.3.7 更新：** 修复 Metrics 面板在特定显示器缩放或分辨率下右侧、底部偶发出现黑边的问题，并保持固定 390 DIP 宽度。
 

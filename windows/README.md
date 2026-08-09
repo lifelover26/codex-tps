@@ -4,6 +4,8 @@ A privacy-first Windows 11 tray monitor for local Codex token throughput.
 The release is a self-contained Portable ZIP: extract it and run the executable;
 no installer or separately installed .NET runtime is required.
 
+**What's new in v0.3.8:** Shift-dragging now keeps the initial mouse-down position as the fixed origin for the entire drag gesture. Pressing, releasing, or pressing Shift again no longer re-anchors the overlay; each Shift press chooses the axis from the total displacement since drag start. Smooth threshold-based axis switching is preserved without accumulated drift.
+
 **What's new in v0.3.7:** Fixed occasional 1px black edges on the Metrics panel at fractional DPI scales. The panel now uses pixel-aligned layout while preserving its fixed 390 DIP width.
 
 **What's new in v0.3.6:** Shift-dragging the unlocked overlay now uses a fixed-origin, threshold-based axis lock. Holding Shift allows smooth horizontal/vertical transitions without accumulated drift; releasing Shift immediately restores free dragging.
@@ -102,7 +104,7 @@ no installer or separately installed .NET runtime is required.
 
 ### Install and Run
 
-1. Download `Codex-TPS-Windows-x64-Portable-0.3.7.zip` and its `.sha256` file.
+1. Download `Codex-TPS-Windows-x64-Portable-0.3.8.zip` and its `.sha256` file.
 2. Verify the checksum before extracting the ZIP.
 3. Extract the ZIP to a stable writable directory, for example:
 
@@ -251,7 +253,7 @@ Existing settings remain in `%LOCALAPPDATA%\CodexTPS`.
 Do not run or extract the package if verification fails.
 
 ```powershell
-$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.3.7.zip"
+$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.3.8.zip"
 $checksumPath = "$zipPath.sha256"
 
 $expectedHash = (Get-Content $checksumPath -Raw).Split('  ')[0].Trim()
@@ -295,14 +297,14 @@ dotnet format .\windows\CodexTPS.slnx --verify-no-changes
 Create the x64 Portable release:
 
 ```powershell
-.\windows\scripts\New-Release.ps1 -Version 0.3.7
+.\windows\scripts\New-Release.ps1 -Version 0.3.8
 ```
 
 The script creates:
 
 ```text
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.7.zip
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.7.zip.sha256
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.8.zip
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.8.zip.sha256
 ```
 
 The ZIP contains exactly:
@@ -316,6 +318,8 @@ The ZIP contains exactly:
 Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 token
 吞吐率的 Windows 11 托盘工具。发布包为自包含 Portable ZIP：解压后即可
 运行，不需要安装程序，也不需要单独安装 .NET 运行时。
+
+**v0.3.8 更新：** Shift 拖动现在会在整个拖动手势中始终使用最初按下鼠标时的位置作为固定原点。按下、松开或再次按下 Shift 都不会重新锚定悬浮窗；每次按下 Shift 都会根据自拖动开始以来的总位移选择轴向，并保留平滑的阈值换轴手感且不会累积漂移。
 
 **v0.3.7 更新：** 修复 Metrics 面板在特定显示器缩放或分辨率下右侧、底部偶发出现黑边的问题，并保持固定 390 DIP 宽度。
 
@@ -390,7 +394,7 @@ Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 tok
 
 ### 安装与启动
 
-1. 下载 `Codex-TPS-Windows-x64-Portable-0.3.7.zip` 和对应的 `.sha256`。
+1. 下载 `Codex-TPS-Windows-x64-Portable-0.3.8.zip` 和对应的 `.sha256`。
 2. 校验 SHA-256 后再解压。
 3. 解压到稳定且可写的目录，例如 `%USERPROFILE%\Apps\CodexTPS`。
 4. 运行 `CodexTPSTray.exe`。
@@ -506,7 +510,7 @@ Alt+Tab 中，普通截图和录屏会包含它。
 dotnet build .\windows\CodexTPS.slnx
 dotnet test .\windows\CodexTPS.slnx
 dotnet format .\windows\CodexTPS.slnx --verify-no-changes
-.\windows\scripts\New-Release.ps1 -Version 0.3.7
+.\windows\scripts\New-Release.ps1 -Version 0.3.8
 ```
 
 发布脚本会生成 Portable ZIP 和对应的 SHA-256 文件。
