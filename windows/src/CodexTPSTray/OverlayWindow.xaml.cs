@@ -34,6 +34,7 @@ public partial class OverlayWindow : Window
     private readonly IMonitorWorkAreaProvider _workAreaProvider;
     private readonly IWindowNativeInterop _native;
     private bool _isLocked;
+    private bool _isOverlayEnabled;
     private bool _isShuttingDown;
     private bool _shutdownPrepared;
     private bool _isDragging;
@@ -64,6 +65,8 @@ public partial class OverlayWindow : Window
     private OverlayOpacityPreference _currentOpacity = OverlayOpacityPreference.Default;
     private TraySettings? _currentSettings;
     private HwndSource? _hwndSource;
+    private bool _hwndHookAttached;
+    private readonly TopmostHealthMonitor _topmostHealthMonitor;
     private readonly DpiRepositionGuard _dpiGuard = new();
     private readonly DpiRepositionGuard _sizeNormalizationGuard = new();
     private IOverlayMenuCommandHandler? _menuCommandHandler;
@@ -75,6 +78,9 @@ public partial class OverlayWindow : Window
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const int WS_EX_TOPMOST = 0x00000008;
+    private const int GWL_EXSTYLE = -20;
+    private const int WM_WINDOWPOSCHANGED = 0x0047;
 
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
@@ -146,6 +152,11 @@ public partial class OverlayWindow : Window
     }
 
     internal OverlayWindow(IMonitorWorkAreaProvider workAreaProvider, IWindowNativeInterop nativeInterop)
+        : this(workAreaProvider, nativeInterop, null, null)
+    {
+    }
+
+    internal OverlayWindow(IMonitorWorkAreaProvider workAreaProvider, IWindowNativeInterop nativeInterop, ITopmostHealthTimer? healthTimer, IDispatcher? healthDispatcher)
     {
         InitializeComponent();
         _workAreaProvider = workAreaProvider;
@@ -166,6 +177,12 @@ public partial class OverlayWindow : Window
         LostMouseCapture += OnLostMouseCapture;
         MouseRightButtonDown += OnMouseRightButtonDown;
         RootBorder.ContextMenuOpening += OnContextMenuOpening;
+
+        _topmostHealthMonitor = new TopmostHealthMonitor(
+            new OverlayTopmostHealthTarget(this),
+            healthDispatcher ?? new WpfDispatcher(),
+            healthTimer ?? new DispatcherTopmostHealthTimer(),
+            TimeSpan.FromSeconds(2));
     }
 
     private void OnContextMenuOpening(object sender, System.Windows.Controls.ContextMenuEventArgs e)
@@ -358,6 +375,35 @@ public partial class OverlayWindow : Window
         {
             _hwndSource.DpiChanged += OnHwndSourceDpiChanged;
         }
+        AttachHwndHook();
+    }
+
+    private void AttachHwndHook()
+    {
+        if (_hwndHookAttached)
+            return;
+        if (_hwndSource == null)
+            return;
+        _hwndSource.AddHook(OnHwndSourceHook);
+        _hwndHookAttached = true;
+    }
+
+    private void DetachHwndHook()
+    {
+        if (!_hwndHookAttached)
+            return;
+        _hwndSource?.RemoveHook(OnHwndSourceHook);
+        _hwndHookAttached = false;
+    }
+
+    private IntPtr OnHwndSourceHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == WM_WINDOWPOSCHANGED)
+        {
+            _topmostHealthMonitor.QueueCheck();
+        }
+        handled = false;
+        return IntPtr.Zero;
     }
 
     private void OnHwndSourceDpiChanged(object sender, System.Windows.HwndDpiChangedEventArgs e)
@@ -518,10 +564,21 @@ public partial class OverlayWindow : Window
             CancelDrag();
             _dpiGuard.Invalidate();
             _sizeNormalizationGuard.Invalidate();
-            return;
+        }
+        else
+        {
+            QueueWindowSizeNormalization(forceLayout: true);
         }
 
-        QueueWindowSizeNormalization(forceLayout: true);
+        UpdateTopmostHealthMonitorEnabled();
+    }
+
+    private void UpdateTopmostHealthMonitorEnabled()
+    {
+        if (!_isShuttingDown && IsVisible && _isOverlayEnabled)
+            _topmostHealthMonitor.Start();
+        else
+            _topmostHealthMonitor.Stop();
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -536,6 +593,8 @@ public partial class OverlayWindow : Window
         CancelDrag();
         _dpiGuard.Invalidate();
         _sizeNormalizationGuard.Invalidate();
+        _topmostHealthMonitor.PrepareForShutdown();
+        DetachHwndHook();
         if (_hwndSource != null)
         {
             _hwndSource.DpiChanged -= OnHwndSourceDpiChanged;
@@ -767,6 +826,21 @@ public partial class OverlayWindow : Window
         }
     }
 
+    /// <summary>
+    /// Reads the native WS_EX_TOPMOST bit via GetWindowLong(GWL_EXSTYLE). This is
+    /// the authoritative topmost state source — the WPF Topmost property may still
+    /// be true while the native Z-order state has drifted. Returns true when no
+    /// HWND is available yet so the monitor does not spuriously recover.
+    /// </summary>
+    internal bool IsNativeTopmostSet()
+    {
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd == IntPtr.Zero)
+            return true;
+        int exStyle = _native.GetWindowLong(hwnd, GWL_EXSTYLE);
+        return (exStyle & WS_EX_TOPMOST) != 0;
+    }
+
     private void EnsureTopmost()
     {
         IntPtr hwnd = _native.GetHandle(this);
@@ -810,6 +884,7 @@ public partial class OverlayWindow : Window
 
         bool wasLocked = _isLocked;
         _isLocked = settings.OverlayLocked;
+        _isOverlayEnabled = settings.OverlayEnabled;
 
         if (wasLocked != _isLocked)
         {
@@ -826,6 +901,7 @@ public partial class OverlayWindow : Window
         _currentOpacity = settings.OverlayOpacity;
         ApplyOpacityToBorder();
         QueueWindowSizeNormalization(forceLayout: true);
+        UpdateTopmostHealthMonitorEnabled();
     }
 
     public void ResetPosition(TraySettings settings)
@@ -914,6 +990,7 @@ public partial class OverlayWindow : Window
 
         _shutdownPrepared = true;
         _isShuttingDown = true;
+        _topmostHealthMonitor.PrepareForShutdown();
         Close();
     }
 
@@ -979,5 +1056,27 @@ public partial class OverlayWindow : Window
             expected.Width,
             expected.Height,
             SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    internal TopmostHealthMonitor TopmostHealthMonitorForTest => _topmostHealthMonitor;
+    internal bool IsHwndHookAttachedForTest => _hwndHookAttached;
+    internal bool IsOverlayEnabledForTest => _isOverlayEnabled;
+
+    internal void InvokeHwndHookForTest(int msg)
+    {
+        bool handled = false;
+        OnHwndSourceHook(_native.GetHandle(this), msg, IntPtr.Zero, IntPtr.Zero, ref handled);
+    }
+
+    private sealed class OverlayTopmostHealthTarget : ITopmostHealthTarget
+    {
+        private readonly OverlayWindow _owner;
+
+        public OverlayTopmostHealthTarget(OverlayWindow owner) => _owner = owner;
+
+        public bool IsVisible => _owner.IsVisible;
+        public bool IsEnabled => _owner._isOverlayEnabled && !_owner._isShuttingDown;
+        public bool IsNativeTopmostSet() => _owner.IsNativeTopmostSet();
+        public void RecoverTopmost() => _owner.EnsureTopmost();
     }
 }
