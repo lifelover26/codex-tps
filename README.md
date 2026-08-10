@@ -39,6 +39,8 @@ Codex TPS for Windows reads the usage events already written to local Codex
 session logs and turns them into an at-a-glance throughput display. It does not
 require an API key and does not upload conversation data.
 
+**What's new in v0.3.9:** The desktop overlay now monitors its native always-on-top state while visible. A low-frequency health check and coalesced window-position notifications restore `TOPMOST` only when the native flag is missing, addressing occasional long-running loss of topmost without repeatedly forcing Z-order.
+
 **What's new in v0.3.8:** Shift-dragging now keeps the initial mouse-down position as the fixed origin for the entire drag gesture. Pressing, releasing, or pressing Shift again no longer re-anchors the overlay; each Shift press chooses the axis from the total displacement since drag start. Smooth threshold-based axis switching is preserved without accumulated drift.
 
 **What's new in v0.3.7:** Fixed occasional 1px black edges on the Metrics panel at fractional DPI scales. The panel now uses pixel-aligned layout while preserving its fixed 390 DIP width.
@@ -147,6 +149,8 @@ troubleshooting, removal, and release packaging.
 Codex TPS for Windows 是一款 Windows 11 托盘工具。它读取 Codex 已写入
 本机的会话用量记录，显示不同时间窗口内的 token 吞吐率。程序本身不需要
 API Key，也不会上传对话内容。
+
+**v0.3.9 更新：** 悬浮窗显示时会持续监测原生置顶状态。程序通过低频健康检查和合并后的窗口位置变化通知，仅在原生 `TOPMOST` 标志确实丢失时恢复置顶，修复长时间使用后偶发失去置顶的问题，同时避免反复强制调整窗口层级。
 
 **v0.3.8 更新：** Shift 拖动现在会在整个拖动手势中始终使用最初按下鼠标时的位置作为固定原点。按下、松开或再次按下 Shift 都不会重新锚定悬浮窗；每次按下 Shift 都会根据自拖动开始以来的总位移选择轴向，并保留平滑的阈值换轴手感且不会累积漂移。
 

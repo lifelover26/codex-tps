@@ -4,6 +4,8 @@ A privacy-first Windows 11 tray monitor for local Codex token throughput.
 The release is a self-contained Portable ZIP: extract it and run the executable;
 no installer or separately installed .NET runtime is required.
 
+**What's new in v0.3.9:** Adds lightweight native topmost health monitoring for the desktop overlay. While the overlay is enabled and visible, the app checks `WS_EX_TOPMOST` every two seconds and after coalesced window-position notifications. Recovery occurs only when the native flag is missing, does not activate or move the overlay, and stops when the overlay is hidden or disabled.
+
 **What's new in v0.3.8:** Shift-dragging now keeps the initial mouse-down position as the fixed origin for the entire drag gesture. Pressing, releasing, or pressing Shift again no longer re-anchors the overlay; each Shift press chooses the axis from the total displacement since drag start. Smooth threshold-based axis switching is preserved without accumulated drift.
 
 **What's new in v0.3.7:** Fixed occasional 1px black edges on the Metrics panel at fractional DPI scales. The panel now uses pixel-aligned layout while preserving its fixed 390 DIP width.
@@ -104,7 +106,7 @@ no installer or separately installed .NET runtime is required.
 
 ### Install and Run
 
-1. Download `Codex-TPS-Windows-x64-Portable-0.3.8.zip` and its `.sha256` file.
+1. Download `Codex-TPS-Windows-x64-Portable-0.3.9.zip` and its `.sha256` file.
 2. Verify the checksum before extracting the ZIP.
 3. Extract the ZIP to a stable writable directory, for example:
 
@@ -156,7 +158,10 @@ adapt when monitor layout changes. When locked, the overlay becomes mouse
 click-through, so it does not block the window underneath. Unlock it from the
 tray menu. The overlay is always on top for normal desktop windows; the app
 reasserts the overlay's native topmost state after Windows sleep/resume, session
-unlock/reconnect, and display recovery. It does not override the UAC secure
+unlock/reconnect, and display recovery. While enabled and visible, it also checks
+the native topmost state at low frequency and after coalesced window-position
+notifications, restoring it only when `WS_EX_TOPMOST` is missing. It does not
+override the UAC secure
 desktop, exclusive fullscreen programs, or other forced-topmost windows. The
 overlay does not appear in the taskbar or Alt+Tab, and is included in normal
 screenshots and recordings.
@@ -253,7 +258,7 @@ Existing settings remain in `%LOCALAPPDATA%\CodexTPS`.
 Do not run or extract the package if verification fails.
 
 ```powershell
-$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.3.8.zip"
+$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.3.9.zip"
 $checksumPath = "$zipPath.sha256"
 
 $expectedHash = (Get-Content $checksumPath -Raw).Split('  ')[0].Trim()
@@ -297,14 +302,14 @@ dotnet format .\windows\CodexTPS.slnx --verify-no-changes
 Create the x64 Portable release:
 
 ```powershell
-.\windows\scripts\New-Release.ps1 -Version 0.3.8
+.\windows\scripts\New-Release.ps1 -Version 0.3.9
 ```
 
 The script creates:
 
 ```text
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.8.zip
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.8.zip.sha256
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.9.zip
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.3.9.zip.sha256
 ```
 
 The ZIP contains exactly:
@@ -318,6 +323,8 @@ The ZIP contains exactly:
 Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 token
 吞吐率的 Windows 11 托盘工具。发布包为自包含 Portable ZIP：解压后即可
 运行，不需要安装程序，也不需要单独安装 .NET 运行时。
+
+**v0.3.9 更新：** 为桌面悬浮窗增加轻量级原生置顶健康监测。仅在悬浮窗启用且显示时，每两秒检查一次 `WS_EX_TOPMOST`，并合并处理窗口位置变化通知；只有原生置顶标志确实丢失时才恢复，不会激活或移动悬浮窗，隐藏或禁用后停止检查。
 
 **v0.3.8 更新：** Shift 拖动现在会在整个拖动手势中始终使用最初按下鼠标时的位置作为固定原点。按下、松开或再次按下 Shift 都不会重新锚定悬浮窗；每次按下 Shift 都会根据自拖动开始以来的总位移选择轴向，并保留平滑的阈值换轴手感且不会累积漂移。
 
@@ -394,7 +401,7 @@ Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 tok
 
 ### 安装与启动
 
-1. 下载 `Codex-TPS-Windows-x64-Portable-0.3.8.zip` 和对应的 `.sha256`。
+1. 下载 `Codex-TPS-Windows-x64-Portable-0.3.9.zip` 和对应的 `.sha256`。
 2. 校验 SHA-256 后再解压。
 3. 解压到稳定且可写的目录，例如 `%USERPROFILE%\Apps\CodexTPS`。
 4. 运行 `CodexTPSTray.exe`。
@@ -432,8 +439,10 @@ Codex 在一次模型请求完成时记录 token 用量。因此这里显示的�
 保存；选择任一预设位置会按当前显示器工作区重新计算，显示器布局变化后会
 自动适配。锁定后悬浮窗会变为鼠标穿透，不会阻挡下面窗口的操作；需要移动
 时从托盘菜单解除锁定。悬浮窗在普通桌面窗口之上保持置顶；程序会在 Windows
-睡眠唤醒、会话解锁/重新连接和显示恢复后重新声明悬浮窗的原生置顶状态。该行为
-不覆盖 UAC 安全桌面、独占全屏程序或其他强制置顶窗口。悬浮窗不出现在任务栏和
+睡眠唤醒、会话解锁/重新连接和显示恢复后重新声明悬浮窗的原生置顶状态。悬浮窗
+启用且显示时，还会低频检查原生置顶状态并合并处理窗口位置变化通知，仅在
+`WS_EX_TOPMOST` 标志确实丢失时恢复置顶。该行为不覆盖 UAC 安全桌面、独占
+全屏程序或其他强制置顶窗口。悬浮窗不出现在任务栏和
 Alt+Tab 中，普通截图和录屏会包含它。
 
 悬浮窗与详细面板共用同一份数据快照和刷新频率，不会启动第二个扫描器，
@@ -510,7 +519,7 @@ Alt+Tab 中，普通截图和录屏会包含它。
 dotnet build .\windows\CodexTPS.slnx
 dotnet test .\windows\CodexTPS.slnx
 dotnet format .\windows\CodexTPS.slnx --verify-no-changes
-.\windows\scripts\New-Release.ps1 -Version 0.3.8
+.\windows\scripts\New-Release.ps1 -Version 0.3.9
 ```
 
 发布脚本会生成 Portable ZIP 和对应的 SHA-256 文件。
