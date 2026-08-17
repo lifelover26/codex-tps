@@ -39,6 +39,8 @@ Codex TPS for Windows reads the usage events already written to local Codex
 session logs and turns them into an at-a-glance throughput display. It does not
 require an API key and does not upload conversation data.
 
+**What's new in v0.4.0:** Adds two custom overlay position modes: **Keep Relative Position** and **Remember per display**. Remember per display stores an independent relative position for each physical monitor. Physical monitor identity uses the Windows display device path, so laptop internal and external displays remain distinguishable even when Windows reuses `\\.\DISPLAY1` under the "show only on 1/2" topology. Existing legacy `DeviceName`-keyed settings are migrated when possible and fall back safely to `DeviceName` when the native identity is unavailable.
+
 **What's new in v0.3.9:** The desktop overlay now monitors its native always-on-top state while visible. A low-frequency health check and coalesced window-position notifications restore `TOPMOST` only when the native flag is missing, addressing occasional long-running loss of topmost without repeatedly forcing Z-order.
 
 **What's new in v0.3.8:** Shift-dragging now keeps the initial mouse-down position as the fixed origin for the entire drag gesture. Pressing, releasing, or pressing Shift again no longer re-anchors the overlay; each Shift press chooses the axis from the total displacement since drag start. Smooth threshold-based axis switching is preserved without accumulated drift.
@@ -72,6 +74,7 @@ warning. Do not run the executable directly from inside the ZIP.
 - Native Windows 11 notification-area application
 - Detailed panel with rolling `1m`, `5m`, `30m`, and `1h` metrics
 - Optional compact desktop overlay that can be dragged or locked click-through
+- Two custom overlay position modes: Keep Relative Position and Remember per display
 - Overlay background opacity levels and position presets snapped to the current monitor's work area
 - Single data-source selection: Windows Codex home or one discovered and accessible WSL distribution (sessions are not merged)
 - Total, input, cached-input, output, and reasoning token throughput
@@ -150,6 +153,8 @@ Codex TPS for Windows 是一款 Windows 11 托盘工具。它读取 Codex 已写
 本机的会话用量记录，显示不同时间窗口内的 token 吞吐率。程序本身不需要
 API Key，也不会上传对话内容。
 
+**v0.4.0 更新：** 新增“保持相对位置”和“按显示器记忆”两种自定义位置模式。“按显示器记忆”会为每台物理显示器分别保存悬浮窗的相对位置。使用 Windows 显示器设备路径区分物理显示器，解决 Windows 在“仅在 1/2 上显示”拓扑切换时把笔记本内屏和外接显示器都复用为 `\\.\DISPLAY1` 的问题。旧版按 `DeviceName` 保存的位置会尽可能迁移；无法取得稳定身份时安全回退到 `DeviceName`。
+
 **v0.3.9 更新：** 悬浮窗显示时会持续监测原生置顶状态。程序通过低频健康检查和合并后的窗口位置变化通知，仅在原生 `TOPMOST` 标志确实丢失时恢复置顶，修复长时间使用后偶发失去置顶的问题，同时避免反复强制调整窗口层级。
 
 **v0.3.8 更新：** Shift 拖动现在会在整个拖动手势中始终使用最初按下鼠标时的位置作为固定原点。按下、松开或再次按下 Shift 都不会重新锚定悬浮窗；每次按下 Shift 都会根据自拖动开始以来的总位移选择轴向，并保留平滑的阈值换轴手感且不会累积漂移。
@@ -181,6 +186,7 @@ ZIP 压缩包内运行程序。
 - 原生 Windows 11 通知区域应用
 - 详细统计面板，支持 `1 分钟 / 5 分钟 / 30 分钟 / 1 小时` 时间窗口
 - 可选桌面悬浮窗；未锁定时可拖动，锁定后鼠标可穿透
+- 两种自定义悬浮窗位置模式：“保持相对位置”和“按显示器记忆”
 - 悬浮窗背景透明度档位与位置预设，预设位置按当前显示器工作区计算
 - 数据源单选：Windows Codex Home 或一个已探测并校验可访问的 WSL 发行版（不合并会话）
 - 显示总 TPS、输入、缓存输入、输出和推理输出
