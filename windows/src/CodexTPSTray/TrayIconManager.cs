@@ -16,6 +16,7 @@ internal interface IOverlayMenuCommandHandler
     void SelectPosition(OverlayPositionPreset preset);
     void SelectOpacity(OverlayOpacityPreference opacity);
     void SelectTheme(OverlayThemePreference theme);
+    void SelectCustomPositionMode(OverlayCustomPositionMode mode);
 }
 
 internal interface IOverlayMenuStateProvider
@@ -77,6 +78,8 @@ public class TrayIconManager : IDisposable
     private readonly ToolStripMenuItem _overlaySubmenu = new();
     private readonly ToolStripMenuItem _overlayThemeSubmenu = new();
     private readonly ToolStripMenuItem _overlayPositionSubmenu = new();
+    private readonly ToolStripMenuItem _overlayCustomPositionSubmenu = new();
+    private readonly Dictionary<OverlayCustomPositionMode, ToolStripMenuItem> _overlayCustomPositionMenuItems = new();
     private readonly ToolStripMenuItem _overlayOpacitySubmenu = new();
 
     private readonly Dictionary<ApplicationThemePreference, ToolStripMenuItem> _applicationThemeMenuItems = new();
@@ -112,7 +115,7 @@ public class TrayIconManager : IDisposable
             new ShellLauncher(),
             new RunKeyStore(),
             () => Environment.ProcessPath,
-            new WpfMonitorWorkAreaProvider(),
+            new WpfMonitorWorkAreaProvider(new WindowsDisplayIdentityProvider()),
             winFormsThemeApplier,
             themeResolver
         );
@@ -264,6 +267,7 @@ public class TrayIconManager : IDisposable
     {
         _overlayWindow = new OverlayWindow(_workAreaProvider);
         _overlayWindow.DragCompleted += OnOverlayDragCompleted;
+        _overlayWindow.CustomPositionSettingsUpdated += OnOverlayCustomPositionSettingsUpdated;
         _overlayWindow.SetOverlayMenuCommandHandler(new OverlayMenuCommandHandler(this));
         _overlayWindow.SetOverlayMenuStateProvider(new OverlayMenuStateProvider(this));
 
@@ -288,6 +292,7 @@ public class TrayIconManager : IDisposable
         public void SelectPosition(OverlayPositionPreset preset) => _manager.SelectOverlayPosition(preset);
         public void SelectOpacity(OverlayOpacityPreference opacity) => _manager.SelectOverlayOpacity(opacity);
         public void SelectTheme(OverlayThemePreference theme) => _manager.SelectOverlayTheme(theme);
+        public void SelectCustomPositionMode(OverlayCustomPositionMode mode) => _manager.SelectOverlayCustomPositionMode(mode);
     }
 
     private sealed class OverlayMenuStateProvider : IOverlayMenuStateProvider
@@ -341,6 +346,38 @@ public class TrayIconManager : IDisposable
     private void SelectOverlayTheme(OverlayThemePreference preference)
     {
         OnOverlayThemeSelected(preference);
+        UpdateOverlayContextMenu();
+    }
+
+    private void SelectOverlayCustomPositionMode(OverlayCustomPositionMode mode)
+    {
+        if (_isShuttingDown || _overlayWindow == null)
+            return;
+
+        var rect = _overlayWindow.GetCurrentRect();
+        var (allMonitors, primaryMonitor) = GetMonitorsAndPrimary();
+
+        if (rect != null)
+        {
+            var (rectLeft, rectTop, width, height) = rect.Value;
+            _currentSettings = OverlayCustomPositionCoordinator.SwitchMode(
+                _currentSettings,
+                mode,
+                rectLeft,
+                rectTop,
+                width,
+                height,
+                allMonitors,
+                primaryMonitor);
+        }
+        else
+        {
+            _currentSettings = OverlayCustomPositionCoordinator.ApplyModeSwitch(_currentSettings, mode);
+        }
+
+        _settingsStore.TrySave(_currentSettings);
+        _overlayWindow.UpdateSettings(_currentSettings);
+        UpdateMenuCheckmarks();
         UpdateOverlayContextMenu();
     }
 
@@ -410,6 +447,13 @@ public class TrayIconManager : IDisposable
                 return;
             _manager._overlayWindow?.ReassertTopmost();
         }
+
+        public void ReconcilePlacement()
+        {
+            if (_manager._isShuttingDown)
+                return;
+            _manager._overlayWindow?.ReconcilePlacement();
+        }
     }
 
     private sealed class ThemeApplicationTarget : IThemeApplicationTarget
@@ -470,25 +514,64 @@ public class TrayIconManager : IDisposable
 
     private void OnOverlayDragCompleted(double left, double top)
     {
-        if (_isShuttingDown)
+        if (_isShuttingDown || _overlayWindow == null)
             return;
 
-        _currentSettings = _currentSettings with
-        {
-            OverlayLeft = left,
-            OverlayTop = top,
-            OverlayPosition = null,
-            OverlayMonitorDeviceName = null
-        };
+        var rect = _overlayWindow.GetCurrentRect();
+        if (rect == null)
+            return;
+
+        var (rectLeft, rectTop, width, height) = rect.Value;
+        var (allMonitors, primaryMonitor) = GetMonitorsAndPrimary();
+
+        _currentSettings = OverlayCustomPositionCoordinator.SaveFromDragEnd(
+            _currentSettings,
+            rectLeft,
+            rectTop,
+            width,
+            height,
+            allMonitors,
+            primaryMonitor);
         _settingsStore.TrySave(_currentSettings);
 
         // Sync the updated settings back to OverlayWindow so its internal state
-        // matches. This is critical for the DPI reposition path: when a DPI change
-        // fires SyncCustomPositionFromWindowRect -> DragCompleted -> this handler,
-        // the OverlayWindow must end up with the same physical coordinates.
-        _overlayWindow?.UpdateSettings(_currentSettings);
+        // matches. Custom mode no longer stores absolute pixels — the normalized
+        // ratios drive all later DPI/display-change re-anchoring.
+        _overlayWindow.UpdateSettings(_currentSettings);
 
         UpdateMenuCheckmarks();
+    }
+
+    private void OnOverlayCustomPositionSettingsUpdated(TraySettings updatedSettings)
+    {
+        if (_isShuttingDown)
+            return;
+
+        _currentSettings = updatedSettings;
+        _settingsStore.TrySave(_currentSettings);
+        _overlayWindow?.UpdateSettings(_currentSettings);
+        UpdateMenuCheckmarks();
+    }
+
+    private (IReadOnlyList<MonitorInfo> All, MonitorInfo Primary) GetMonitorsAndPrimary()
+    {
+        var all = _workAreaProvider.GetAllMonitorInfos();
+        var primaryWorkArea = _workAreaProvider.GetPrimaryWorkArea();
+        MonitorInfo primary = new MonitorInfo(
+            DeviceName: string.Empty,
+            WorkingArea: primaryWorkArea,
+            IsPrimary: true);
+
+        foreach (var info in all)
+        {
+            if (info.IsPrimary)
+            {
+                primary = info;
+                break;
+            }
+        }
+
+        return (all, primary);
     }
 
     private void InitializeContextMenu()
@@ -559,6 +642,19 @@ public class TrayIconManager : IDisposable
         }
         _overlayPositionSubmenu.DropDownOpening += OnOverlayPositionSubmenuOpening;
         _overlaySubmenu.DropDownItems.Add(_overlayPositionSubmenu);
+
+        _overlayCustomPositionSubmenu.Text = Localization.CustomPositionMenu(_currentSettings.Language);
+        foreach (var mode in OverlayMenuDefinition.CustomPositionModes)
+        {
+            var item = new ToolStripMenuItem(OverlayMenuDefinition.GetCustomPositionModeText(mode, _currentSettings.Language))
+            {
+                CheckOnClick = true
+            };
+            item.Click += (sender, e) => OnOverlayCustomPositionModeSelected(mode);
+            _overlayCustomPositionMenuItems[mode] = item;
+            _overlayCustomPositionSubmenu.DropDownItems.Add(item);
+        }
+        _overlaySubmenu.DropDownItems.Add(_overlayCustomPositionSubmenu);
 
         _overlayOpacitySubmenu.Text = Localization.BackgroundOpacityMenu(_currentSettings.Language);
         foreach (var preference in OverlayMenuDefinition.OpacityPreferences)
@@ -711,6 +807,14 @@ public class TrayIconManager : IDisposable
 
         _overlayWindow?.ApplyOpacity(preference);
         UpdateMenuCheckmarks();
+    }
+
+    private void OnOverlayCustomPositionModeSelected(OverlayCustomPositionMode mode)
+    {
+        if (_isShuttingDown)
+            return;
+
+        SelectOverlayCustomPositionMode(mode);
     }
 
     private void OnOverlayPositionSubmenuOpening(object? sender, EventArgs e)
@@ -1045,6 +1149,12 @@ public class TrayIconManager : IDisposable
         foreach (var kvp in _overlayPositionMenuItems)
         {
             kvp.Value.Text = Localization.GetPositionPresetDisplayName(kvp.Key, language);
+        }
+
+        _overlayCustomPositionSubmenu.Text = Localization.CustomPositionMenu(language);
+        foreach (var kvp in _overlayCustomPositionMenuItems)
+        {
+            kvp.Value.Text = OverlayMenuDefinition.GetCustomPositionModeText(kvp.Key, language);
         }
 
         _overlayOpacitySubmenu.Text = Localization.BackgroundOpacityMenu(language);
@@ -1530,6 +1640,12 @@ public class TrayIconManager : IDisposable
         {
             kvp.Value.Enabled = overlayVisible;
             kvp.Value.Checked = kvp.Key == _currentSettings.OverlayPosition;
+        }
+
+        foreach (var kvp in _overlayCustomPositionMenuItems)
+        {
+            kvp.Value.Enabled = overlayVisible;
+            kvp.Value.Checked = kvp.Key == _currentSettings.OverlayCustomPositionMode;
         }
 
         foreach (var kvp in _overlayOpacityMenuItems)

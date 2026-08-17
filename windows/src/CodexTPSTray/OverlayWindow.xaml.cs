@@ -74,6 +74,7 @@ public partial class OverlayWindow : Window
     private readonly Dictionary<OverlayPositionPreset, WpfMenuItem> _positionMenuItems = new();
     private readonly Dictionary<OverlayOpacityPreference, WpfMenuItem> _opacityMenuItems = new();
     private readonly Dictionary<OverlayThemePreference, WpfMenuItem> _themeMenuItems = new();
+    private readonly Dictionary<OverlayCustomPositionMode, WpfMenuItem> _customPositionModeMenuItems = new();
 
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -141,6 +142,15 @@ public partial class OverlayWindow : Window
     }
 
     public event Action<double, double>? DragCompleted;
+
+    /// <summary>
+    /// Raised when ResolvePosition produces updated custom-position settings
+    /// (legacy migration or a first-seen display inheriting its own record).
+    /// The owner must persist the new settings and push them back via
+    /// UpdateSettings. Never raised for a user drag — drags go through
+    /// DragCompleted. Never raised when the restored state is unchanged.
+    /// </summary>
+    public event Action<TraySettings>? CustomPositionSettingsUpdated;
 
     internal bool IsDragging => _isDragging;
     internal bool IsAxisLocked => _isDragging && _currentAxis != AxisLockDirection.None;
@@ -214,6 +224,9 @@ public partial class OverlayWindow : Window
         _themeMenuItems[OverlayThemePreference.System] = ThemeSystem;
         _themeMenuItems[OverlayThemePreference.Light] = ThemeLight;
         _themeMenuItems[OverlayThemePreference.Dark] = ThemeDark;
+
+        _customPositionModeMenuItems[OverlayCustomPositionMode.KeepRelative] = CustomPositionKeepRelative;
+        _customPositionModeMenuItems[OverlayCustomPositionMode.RememberPerDisplay] = CustomPositionRememberPerDisplay;
     }
 
     internal void SetOverlayMenuCommandHandler(IOverlayMenuCommandHandler handler)
@@ -272,6 +285,11 @@ public partial class OverlayWindow : Window
             _themeMenuItems[theme].IsChecked = theme == overlayTheme;
         }
 
+        foreach (var mode in OverlayMenuDefinition.CustomPositionModes)
+        {
+            _customPositionModeMenuItems[mode].IsChecked = mode == settings.OverlayCustomPositionMode;
+        }
+
         UpdateMenuLocalization(settings.Language);
     }
 
@@ -280,6 +298,7 @@ public partial class OverlayWindow : Window
         ShowOverlayMenuItem.Header = Localization.ShowOverlayMenu(language);
         LockOverlayMenuItem.Header = Localization.LockOverlayMenu(language);
         PositionSubmenu.Header = Localization.PositionMenu(language);
+        CustomPositionSubmenu.Header = Localization.CustomPositionMenu(language);
         OpacitySubmenu.Header = Localization.BackgroundOpacityMenu(language);
         ThemeSubmenu.Header = Localization.OverlayThemeMenu(language);
 
@@ -296,6 +315,11 @@ public partial class OverlayWindow : Window
         foreach (var theme in OverlayMenuDefinition.ThemePreferences)
         {
             _themeMenuItems[theme].Header = OverlayMenuDefinition.GetThemeText(theme, language);
+        }
+
+        foreach (var mode in OverlayMenuDefinition.CustomPositionModes)
+        {
+            _customPositionModeMenuItems[mode].Header = OverlayMenuDefinition.GetCustomPositionModeText(mode, language);
         }
     }
 
@@ -363,6 +387,23 @@ public partial class OverlayWindow : Window
             if (kvp.Value == item)
             {
                 _menuCommandHandler.SelectTheme(kvp.Key);
+                return;
+            }
+        }
+    }
+
+    private void OnCustomPositionModeClicked(object sender, RoutedEventArgs e)
+    {
+        if (_menuCommandHandler == null || _isLocked || _isShuttingDown || sender is not WpfMenuItem item)
+            return;
+
+        OverlayContextMenu.IsOpen = false;
+
+        foreach (var kvp in _customPositionModeMenuItems)
+        {
+            if (kvp.Value == item)
+            {
+                _menuCommandHandler.SelectCustomPositionMode(kvp.Key);
                 return;
             }
         }
@@ -452,44 +493,21 @@ public partial class OverlayWindow : Window
         if (hwnd == IntPtr.Zero || !_native.GetWindowRect(hwnd, out RECT currentRect))
             return;
 
-        if (_currentSettings.OverlayPosition.HasValue)
-        {
-            // Preset position: re-anchor to target monitor with new DPI margins
-            int width = currentRect.Right - currentRect.Left;
-            int height = currentRect.Bottom - currentRect.Top;
-            if (width > 0 && height > 0)
-            {
-                var (left, top) = ResolvePosition(_currentSettings, width, height);
-                _native.SetWindowPos(hwnd, IntPtr.Zero, (int)left, (int)top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-                EnsureTopmost();
-            }
-        }
-        else
-        {
-            // Custom position: sync final WPF-placed coordinates back to settings after DPI change
-            // to avoid restoring stale physical coordinates on next launch.
-            // Do NOT jump to old OverlayLeft/OverlayTop — let WPF's native DPI placement stand.
-            SyncCustomPositionFromWindowRect(currentRect);
-        }
-    }
+        int width = currentRect.Right - currentRect.Left;
+        int height = currentRect.Bottom - currentRect.Top;
+        if (width <= 0 || height <= 0)
+            return;
 
-    private void SyncCustomPositionFromWindowRect(RECT physicalRect)
-    {
-        // Position storage uses physical screen coordinates (consistent with GetWindowRect,
-        // SetWindowPos, and Screen.WorkingArea from WinForms). Save the final physical
-        // position as-placed by WPF after DPI change so next launch resumes from the correct spot.
-        try
-        {
-            int physicalWidth = physicalRect.Right - physicalRect.Left;
-            int physicalHeight = physicalRect.Bottom - physicalRect.Top;
-            if (physicalWidth <= 0 || physicalHeight <= 0)
-                return;
-
-            DragCompleted?.Invoke(physicalRect.Left, physicalRect.Top);
-        }
-        catch
-        {
-        }
+        // Both preset and custom positions re-anchor from saved state against the
+        // current monitor's work area. For custom mode this is idempotent —
+        // repeated DPI or display-config notifications re-derive the same position
+        // and never accumulate drift. DragCompleted is NOT fired in either branch:
+        // auto-reposition must never masquerade as a user drag or write
+        // intermediate physical coordinates back to settings. Legacy migration and
+        // first-seen display inheritance are surfaced via CustomPositionSettingsUpdated.
+        var (left, top) = ResolvePosition(_currentSettings, width, height);
+        _native.SetWindowPos(hwnd, IntPtr.Zero, (int)left, (int)top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        EnsureTopmost();
     }
 
     internal void ApplyTheme(EffectiveTheme theme)
@@ -857,6 +875,20 @@ public partial class OverlayWindow : Window
         EnsureTopmost();
     }
 
+    /// <summary>
+    /// Re-anchors the overlay window position after a display configuration
+    /// change (resolution, DPI, topology, monitor connect/disconnect). Delegates
+    /// to <see cref="ExecuteDpiReposition"/> which already guards against
+    /// shutdown, !IsLoaded, !IsVisible, and _isDragging. The re-anchor is
+    /// idempotent — it re-derives position from saved normalized ratios and
+    /// never fires DragCompleted or writes intermediate coordinates back to
+    /// settings.
+    /// </summary>
+    internal void ReconcilePlacement()
+    {
+        ExecuteDpiReposition();
+    }
+
     public void UpdateContent(string[] lines)
     {
         if (_isShuttingDown)
@@ -970,17 +1002,35 @@ public partial class OverlayWindow : Window
         MonitorInfo primaryMonitor = allMonitorInfosForCustom.FirstOrDefault(i => i.IsPrimary)
             ?? new MonitorInfo(string.Empty, _workAreaProvider.GetPrimaryWorkArea(), true);
 
-        Thickness primaryPhysicalMargin = DpiHelper.ConvertDipMarginToPhysical(dipMargin, primaryMonitor.DpiX, primaryMonitor.DpiY);
-        var allWorkAreas = _workAreaProvider.GetAllWorkAreas();
+        // Resolve the current physical position so the coordinator can determine
+        // which monitor the overlay currently occupies. On first show this is the
+        // WPF default placement (typically the primary monitor); on DPI/display
+        // changes it is the live HWND position. Falls back to (0,0) — which
+        // FindBestMonitor maps to the primary — when the HWND is unavailable.
+        double currentLeft = 0.0;
+        double currentTop = 0.0;
+        IntPtr hwndForCustom = _native.GetHandle(this);
+        if (hwndForCustom != IntPtr.Zero && _native.GetWindowRect(hwndForCustom, out RECT currentCustomRect))
+        {
+            currentLeft = currentCustomRect.Left;
+            currentTop = currentCustomRect.Top;
+        }
 
-        return OverlayPositionCalculator.CalculatePosition(
-            settings.OverlayLeft,
-            settings.OverlayTop,
-            overlaySize,
-            primaryMonitor.WorkingArea,
-            allWorkAreas,
-            primaryPhysicalMargin
-        );
+        var (resolvedLeft, resolvedTop, updatedSettings) = OverlayCustomPositionCoordinator.ResolveRestorePosition(
+            settings,
+            currentLeft,
+            currentTop,
+            width,
+            height,
+            allMonitorInfosForCustom,
+            primaryMonitor);
+
+        if (updatedSettings != null)
+        {
+            CustomPositionSettingsUpdated?.Invoke(updatedSettings);
+        }
+
+        return (resolvedLeft, resolvedTop);
     }
 
     public void PrepareForShutdown()

@@ -1113,4 +1113,226 @@ public class TraySettingsStoreTests : IDisposable
         Assert.Null(loaded.OverlayLeft);
         Assert.Null(loaded.OverlayTop);
     }
+
+    [Fact]
+    public void Load_MissingFile_DefaultCustomPositionModeIsKeepRelative()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayCustomPositionMode.KeepRelative, settings.OverlayCustomPositionMode);
+        Assert.Null(settings.OverlayXRatio);
+        Assert.Null(settings.OverlayYRatio);
+        Assert.Null(settings.OverlayPerDisplayPositions);
+    }
+
+    [Fact]
+    public void TrySave_KeepRelativeRatios_SavesAndReloads()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = TraySettings.Default with
+        {
+            OverlayPosition = null,
+            OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+            OverlayXRatio = 0.3,
+            OverlayYRatio = 0.7
+        };
+
+        Assert.True(store.TrySave(settings));
+
+        var loaded = store.Load();
+        Assert.Equal(OverlayCustomPositionMode.KeepRelative, loaded.OverlayCustomPositionMode);
+        Assert.Equal(0.3, loaded.OverlayXRatio);
+        Assert.Equal(0.7, loaded.OverlayYRatio);
+        Assert.Null(loaded.OverlayLeft);
+        Assert.Null(loaded.OverlayTop);
+    }
+
+    [Fact]
+    public void TrySave_RememberPerDisplay_SavesAndReloadsRecords()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var positions = new Dictionary<string, DisplayRelativePosition>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"\\.\DISPLAY1"] = new DisplayRelativePosition(0.25, 0.5),
+            [@"\\.\DISPLAY2"] = new DisplayRelativePosition(0.75, 0.2)
+        };
+
+        var settings = TraySettings.Default with
+        {
+            OverlayPosition = null,
+            OverlayCustomPositionMode = OverlayCustomPositionMode.RememberPerDisplay,
+            OverlayPerDisplayPositions = positions
+        };
+
+        Assert.True(store.TrySave(settings));
+
+        var loaded = store.Load();
+        Assert.Equal(OverlayCustomPositionMode.RememberPerDisplay, loaded.OverlayCustomPositionMode);
+        Assert.NotNull(loaded.OverlayPerDisplayPositions);
+        Assert.Equal(2, loaded.OverlayPerDisplayPositions!.Count);
+
+        var display1 = loaded.OverlayPerDisplayPositions[@"\\.\DISPLAY1"];
+        Assert.Equal(0.25, display1.XRatio);
+        Assert.Equal(0.5, display1.YRatio);
+
+        var display2 = loaded.OverlayPerDisplayPositions[@"\\.\DISPLAY2"];
+        Assert.Equal(0.75, display2.XRatio);
+        Assert.Equal(0.2, display2.YRatio);
+    }
+
+    [Fact]
+    public void TrySave_AllCustomPositionModes_Roundtrip()
+    {
+        foreach (OverlayCustomPositionMode mode in Enum.GetValues<OverlayCustomPositionMode>())
+        {
+            string testPath = Path.Combine(_tempDirectory, $"custommode_{mode}.json");
+            var store = TraySettingsStore.CreateForTests(testPath);
+            var settings = TraySettings.Default with
+            {
+                OverlayPosition = null,
+                OverlayCustomPositionMode = mode,
+                OverlayXRatio = 0.4,
+                OverlayYRatio = 0.6
+            };
+
+            Assert.True(store.TrySave(settings));
+
+            var loaded = store.Load();
+            Assert.Equal(mode, loaded.OverlayCustomPositionMode);
+        }
+    }
+
+    [Fact]
+    public void Load_InvalidCustomPositionMode_FallsBackToKeepRelative()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayCustomPositionMode\":\"Invalid\"}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(OverlayCustomPositionMode.KeepRelative, settings.OverlayCustomPositionMode);
+    }
+
+    [Fact]
+    public void Load_RatiosClampedToUnitInterval()
+    {
+        File.WriteAllText(_settingsPath, "{\"SelectedWindow\":\"OneMinute\",\"RefreshCadence\":15,\"OverlayXRatio\":1.7,\"OverlayYRatio\":-0.4}");
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = store.Load();
+
+        Assert.Equal(1.0, settings.OverlayXRatio);
+        Assert.Equal(0.0, settings.OverlayYRatio);
+    }
+
+    [Fact]
+    public void TrySave_PresetMode_PreservesCustomPositionMemory()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var positions = new Dictionary<string, DisplayRelativePosition>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"\\.\DISPLAY2"] = new DisplayRelativePosition(0.8, 0.3)
+        };
+
+        var settings = TraySettings.Default with
+        {
+            OverlayPosition = OverlayPositionPreset.TopRight,
+            OverlayCustomPositionMode = OverlayCustomPositionMode.RememberPerDisplay,
+            OverlayXRatio = 0.5,
+            OverlayYRatio = 0.5,
+            OverlayPerDisplayPositions = positions,
+            OverlayCustomMonitorId = @"\\.\DISPLAY2"
+        };
+
+        Assert.True(store.TrySave(settings));
+
+        var loaded = store.Load();
+        Assert.Equal(OverlayPositionPreset.TopRight, loaded.OverlayPosition);
+        Assert.Equal(OverlayCustomPositionMode.RememberPerDisplay, loaded.OverlayCustomPositionMode);
+        Assert.Equal(0.5, loaded.OverlayXRatio);
+        Assert.Equal(0.5, loaded.OverlayYRatio);
+        Assert.NotNull(loaded.OverlayPerDisplayPositions);
+        Assert.Single(loaded.OverlayPerDisplayPositions!);
+        Assert.Equal(@"\\.\DISPLAY2", loaded.OverlayCustomMonitorId);
+    }
+
+    [Fact]
+    public void TrySave_LegacyMigratedFormat_ReloadsWithoutLegacyCoords()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var migrated = TraySettings.Default with
+        {
+            OverlayPosition = null,
+            OverlayLeft = null,
+            OverlayTop = null,
+            OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+            OverlayXRatio = 0.42,
+            OverlayYRatio = 0.58
+        };
+
+        Assert.True(store.TrySave(migrated));
+
+        var loaded = store.Load();
+        Assert.Null(loaded.OverlayLeft);
+        Assert.Null(loaded.OverlayTop);
+        Assert.Equal(0.42, loaded.OverlayXRatio);
+        Assert.Equal(0.58, loaded.OverlayYRatio);
+        Assert.Equal(OverlayCustomPositionMode.KeepRelative, loaded.OverlayCustomPositionMode);
+    }
+
+    [Fact]
+    public void TrySave_DoesNotPersistUserDataPaths()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = TraySettings.Default with
+        {
+            OverlayPosition = null,
+            OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+            OverlayXRatio = 0.5,
+            OverlayYRatio = 0.5
+        };
+
+        Assert.True(store.TrySave(settings));
+
+        string json = File.ReadAllText(_settingsPath);
+        Assert.DoesNotContain("CodexHome", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("sessions", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TrySave_OverlayCustomMonitorId_Roundtrips()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = TraySettings.Default with
+        {
+            OverlayPosition = null,
+            OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+            OverlayXRatio = 0.3,
+            OverlayYRatio = 0.7,
+            OverlayCustomMonitorId = @"\\.\DISPLAY2"
+        };
+
+        Assert.True(store.TrySave(settings));
+
+        var loaded = store.Load();
+        Assert.Equal(@"\\.\DISPLAY2", loaded.OverlayCustomMonitorId);
+    }
+
+    [Fact]
+    public void TrySave_PresetMode_PreservesCustomMonitorId()
+    {
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        var settings = TraySettings.Default with
+        {
+            OverlayPosition = OverlayPositionPreset.TopLeft,
+            OverlayCustomMonitorId = @"\\.\DISPLAY2"
+        };
+
+        Assert.True(store.TrySave(settings));
+
+        var loaded = store.Load();
+        Assert.Equal(OverlayPositionPreset.TopLeft, loaded.OverlayPosition);
+        Assert.Equal(@"\\.\DISPLAY2", loaded.OverlayCustomMonitorId);
+    }
 }

@@ -160,6 +160,10 @@
                     <MenuItem x:Name="PositionBottomLeft" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
                     <MenuItem x:Name="PositionBottomRight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
                 </MenuItem>
+                <MenuItem x:Name="CustomPositionSubmenu" Style="{StaticResource OverlayMenuItemStyle}">
+                    <MenuItem x:Name="CustomPositionKeepRelative" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnCustomPositionModeClicked"/>
+                    <MenuItem x:Name="CustomPositionRememberPerDisplay" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnCustomPositionModeClicked"/>
+                </MenuItem>
                 <MenuItem x:Name="OpacitySubmenu" Style="{StaticResource OverlayMenuItemStyle}">
                     <MenuItem x:Name="OpacityDefault" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnOpacityClicked"/>
                     <MenuItem x:Name="Opacity40" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnOpacityClicked"/>

@@ -358,4 +358,54 @@ public class LocalizationTests
     {
         Assert.Equal("保存数据源设置失败。", Localization.DataSourceSaveFailed(Language.Chinese));
     }
+
+    [Fact]
+    public void CustomPositionMenu_English()
+    {
+        Assert.Equal("Custom Position", Localization.CustomPositionMenu(Language.English));
+    }
+
+    [Fact]
+    public void CustomPositionMenu_Chinese()
+    {
+        Assert.Equal("自定义位置", Localization.CustomPositionMenu(Language.Chinese));
+    }
+
+    [Fact]
+    public void GetCustomPositionModeDisplayName_KeepRelative_English()
+    {
+        Assert.Equal("Keep Relative Position", Localization.GetCustomPositionModeDisplayName(OverlayCustomPositionMode.KeepRelative, Language.English));
+    }
+
+    [Fact]
+    public void GetCustomPositionModeDisplayName_KeepRelative_Chinese()
+    {
+        Assert.Equal("保持相对位置", Localization.GetCustomPositionModeDisplayName(OverlayCustomPositionMode.KeepRelative, Language.Chinese));
+    }
+
+    [Fact]
+    public void GetCustomPositionModeDisplayName_RememberPerDisplay_English()
+    {
+        Assert.Equal("Remember per display", Localization.GetCustomPositionModeDisplayName(OverlayCustomPositionMode.RememberPerDisplay, Language.English));
+    }
+
+    [Fact]
+    public void GetCustomPositionModeDisplayName_RememberPerDisplay_Chinese()
+    {
+        Assert.Equal("按显示器记忆", Localization.GetCustomPositionModeDisplayName(OverlayCustomPositionMode.RememberPerDisplay, Language.Chinese));
+    }
+
+    [Fact]
+    public void CustomPositionModeLabels_AreConciseAndNonEmpty()
+    {
+        foreach (OverlayCustomPositionMode mode in Enum.GetValues<OverlayCustomPositionMode>())
+        {
+            string en = Localization.GetCustomPositionModeDisplayName(mode, Language.English);
+            string cn = Localization.GetCustomPositionModeDisplayName(mode, Language.Chinese);
+            Assert.False(string.IsNullOrWhiteSpace(en));
+            Assert.False(string.IsNullOrWhiteSpace(cn));
+            Assert.True(en.Length <= 32, $"English label too long: {en}");
+            Assert.True(cn.Length <= 16, $"Chinese label too long: {cn}");
+        }
+    }
 }

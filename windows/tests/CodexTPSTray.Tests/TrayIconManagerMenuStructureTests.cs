@@ -165,4 +165,102 @@ public class TrayIconManagerMenuStructureTests
             Assert.Contains("1 hour", allItemTexts);
         });
     }
+
+    [Fact]
+    public Task Menu_OverlaySubmenu_HasCustomPositionSubmenu()
+    {
+        return WpfTestHelpers.RunInStaWithWpfAsync(async () =>
+        {
+            var settings = TraySettings.Default;
+            var settingsStore = new FakeSettingsStore(settings);
+
+            using var manager = new TrayIconManager(
+                settingsStore,
+                settings,
+                new SessionScanner(),
+                new FakeShellLauncher(),
+                new FakeRunKeyStore(),
+                () => null,
+                new WpfMonitorWorkAreaProvider(),
+                new WindowsFormsThemeApplier(),
+                new ThemeResolver(new WindowsSystemThemeSource())
+            );
+            manager.Start();
+            await manager.StartupTask;
+
+            var allItemTexts = GetAllMenuItems(manager.ContextMenuStrip!.Items)
+                .Select(i => i is ToolStripMenuItem mi ? mi.Text : "-")
+                .ToList();
+
+            Assert.Contains("Custom Position", allItemTexts);
+            Assert.Contains("Keep Relative Position", allItemTexts);
+            Assert.Contains("Remember per display", allItemTexts);
+        });
+    }
+
+    [Fact]
+    public Task Menu_OverlaySubmenu_CustomPositionSubmenu_Chinese()
+    {
+        return WpfTestHelpers.RunInStaWithWpfAsync(async () =>
+        {
+            var settings = TraySettings.Default with { Language = Language.Chinese };
+            var settingsStore = new FakeSettingsStore(settings);
+
+            using var manager = new TrayIconManager(
+                settingsStore,
+                settings,
+                new SessionScanner(),
+                new FakeShellLauncher(),
+                new FakeRunKeyStore(),
+                () => null,
+                new WpfMonitorWorkAreaProvider(),
+                new WindowsFormsThemeApplier(),
+                new ThemeResolver(new WindowsSystemThemeSource())
+            );
+            manager.Start();
+            await manager.StartupTask;
+
+            var allItemTexts = GetAllMenuItems(manager.ContextMenuStrip!.Items)
+                .Select(i => i is ToolStripMenuItem mi ? mi.Text : "-")
+                .ToList();
+
+            Assert.Contains("自定义位置", allItemTexts);
+            Assert.Contains("保持相对位置", allItemTexts);
+            Assert.Contains("按显示器记忆", allItemTexts);
+        });
+    }
+
+    [Fact]
+    public Task Menu_OverlaySubmenu_CustomPosition_KeepRelativeCheckedByDefault()
+    {
+        return WpfTestHelpers.RunInStaWithWpfAsync(async () =>
+        {
+            var settings = TraySettings.Default;
+            var settingsStore = new FakeSettingsStore(settings);
+
+            using var manager = new TrayIconManager(
+                settingsStore,
+                settings,
+                new SessionScanner(),
+                new FakeShellLauncher(),
+                new FakeRunKeyStore(),
+                () => null,
+                new WpfMonitorWorkAreaProvider(),
+                new WindowsFormsThemeApplier(),
+                new ThemeResolver(new WindowsSystemThemeSource())
+            );
+            manager.Start();
+            await manager.StartupTask;
+
+            var allItems = GetAllMenuItems(manager.ContextMenuStrip!.Items)
+                .OfType<ToolStripMenuItem>()
+                .ToList();
+
+            var keepRelative = allItems.First(i => i.Text == "Keep Relative Position");
+            var rememberPerDisplay = allItems.First(i => i.Text == "Remember per display");
+
+            Assert.True(keepRelative.Checked);
+            Assert.False(rememberPerDisplay.Checked);
+        });
+    }
 }

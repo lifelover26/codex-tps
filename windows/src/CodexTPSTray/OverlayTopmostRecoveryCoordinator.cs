@@ -9,6 +9,7 @@ internal interface IOverlayTopmostRecoveryTarget
     bool IsVisible { get; }
     bool IsEnabled { get; }
     void ReassertTopmost();
+    void ReconcilePlacement();
 }
 
 internal interface IRecoveryTimer
@@ -173,6 +174,7 @@ internal sealed class OverlayTopmostRecoveryCoordinator : IDisposable
             if (_target.IsEnabled && _target.IsVisible)
             {
                 _target.ReassertTopmost();
+                _target.ReconcilePlacement();
             }
 
             _timer.Restart(_delay, OnDelayedRetry);
@@ -191,6 +193,7 @@ internal sealed class OverlayTopmostRecoveryCoordinator : IDisposable
         if (_target.IsEnabled && _target.IsVisible)
         {
             _target.ReassertTopmost();
+            _target.ReconcilePlacement();
         }
     }
 }

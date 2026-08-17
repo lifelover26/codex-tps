@@ -207,32 +207,121 @@ public class OverlayWindowDpiTests
     }
 
     [Fact]
-    public void ExecuteDpiRepositionCore_CustomMode_FiresDragCompletedWithPhysicalCoords()
+    public void ExecuteDpiRepositionCore_CustomMode_ReanchorsFromRatios_WithoutDragCompleted()
     {
         WpfTestHelpers.RunInStaWithWpf(() =>
         {
             var provider = CreateSingleMonitorProvider(192);
             var interop = new FakeWindowNativeInterop();
-            // Window at physical (3000, 500), size 200x120
-            interop.CurrentRect = new OverlayWindow.RECT { Left = 3000, Top = 500, Right = 3200, Bottom = 620 };
+            interop.CurrentRect = new OverlayWindow.RECT { Left = 100, Top = 100, Right = 300, Bottom = 220 };
 
             var window = new OverlayWindow(provider, interop);
-            double savedLeft = double.NaN, savedTop = double.NaN;
-            window.DragCompleted += (l, t) => { savedLeft = l; savedTop = t; };
+            bool dragFired = false;
+            window.DragCompleted += (_, _) => dragFired = true;
 
-            // Custom position mode (no preset)
+            // Custom position with normalized ratios (no legacy absolute coords).
             window.UpdateSettings(TraySettings.Default with
             {
                 OverlayPosition = null,
-                OverlayLeft = 999,
-                OverlayTop = 999
+                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+                OverlayXRatio = 0.5,
+                OverlayYRatio = 0.25
             });
 
+            interop.SetWindowPosCalls.Clear();
             window.ExecuteDpiRepositionCore();
 
-            // Must save physical pixel coordinates, NOT DIP-converted values
-            Assert.Equal(3000.0, savedLeft, 0);
-            Assert.Equal(500.0, savedTop, 0);
+            // Auto-reposition must NOT fire DragCompleted (no fake drag).
+            Assert.False(dragFired);
+
+            // Re-anchor from ratios against the 1920x1040 work area:
+            // xRange = 1920 - 200 = 1720, yRange = 1040 - 120 = 920
+            // left = 0.5 * 1720 = 860, top = 0.25 * 920 = 230
+            var moveCall = FindMoveCall(interop.SetWindowPosCalls);
+            Assert.NotNull(moveCall);
+            Assert.Equal(860, moveCall!.Value.X);
+            Assert.Equal(230, moveCall.Value.Y);
+        });
+    }
+
+    [Fact]
+    public void ExecuteDpiRepositionCore_CustomMode_RepeatedDpiCalls_IdempotentNoDrift()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var provider = CreateSingleMonitorProvider(144);
+            var interop = new FakeWindowNativeInterop();
+            interop.CurrentRect = new OverlayWindow.RECT { Left = 860, Top = 230, Right = 1060, Bottom = 350 };
+
+            var window = new OverlayWindow(provider, interop);
+            int dragCount = 0;
+            window.DragCompleted += (_, _) => dragCount++;
+
+            window.UpdateSettings(TraySettings.Default with
+            {
+                OverlayPosition = null,
+                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+                OverlayXRatio = 0.5,
+                OverlayYRatio = 0.25
+            });
+
+            interop.SetWindowPosCalls.Clear();
+            window.ExecuteDpiRepositionCore();
+            var firstMove = FindMoveCall(interop.SetWindowPosCalls);
+
+            interop.SetWindowPosCalls.Clear();
+            window.ExecuteDpiRepositionCore();
+            var secondMove = FindMoveCall(interop.SetWindowPosCalls);
+
+            // Repeated DPI notifications are idempotent: same position, no drift,
+            // and never a DragCompleted.
+            Assert.NotNull(firstMove);
+            Assert.NotNull(secondMove);
+            Assert.Equal(firstMove!.Value.X, secondMove!.Value.X);
+            Assert.Equal(firstMove.Value.Y, secondMove.Value.Y);
+            Assert.Equal(0, dragCount);
+        });
+    }
+
+    [Fact]
+    public void ExecuteDpiRepositionCore_CustomMode_LegacyMigrates_Reanchors_WithoutDragCompleted()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var provider = CreateSingleMonitorProvider(96);
+            var interop = new FakeWindowNativeInterop();
+            interop.CurrentRect = new OverlayWindow.RECT { Left = 500, Top = 300, Right = 700, Bottom = 420 };
+
+            var window = new OverlayWindow(provider, interop);
+            bool dragFired = false;
+            window.DragCompleted += (_, _) => dragFired = true;
+            TraySettings? migrated = null;
+            window.CustomPositionSettingsUpdated += s => migrated = s;
+
+            // Legacy absolute coordinates, no ratios yet.
+            window.UpdateSettings(TraySettings.Default with
+            {
+                OverlayPosition = null,
+                OverlayLeft = 500.0,
+                OverlayTop = 300.0
+            });
+
+            interop.SetWindowPosCalls.Clear();
+            window.ExecuteDpiRepositionCore();
+
+            Assert.False(dragFired);
+            Assert.NotNull(migrated);
+            // Migration clears legacy coords and produces normalized ratios.
+            Assert.Null(migrated!.OverlayLeft);
+            Assert.Null(migrated.OverlayTop);
+            Assert.True(migrated.OverlayXRatio.HasValue);
+            Assert.True(migrated.OverlayYRatio.HasValue);
+
+            // Position is preserved through migration (same relative spot).
+            var moveCall = FindMoveCall(interop.SetWindowPosCalls);
+            Assert.NotNull(moveCall);
+            Assert.Equal(500, moveCall!.Value.X);
+            Assert.Equal(300, moveCall.Value.Y);
         });
     }
 
@@ -287,57 +376,66 @@ public class OverlayWindowDpiTests
                 OverlayPosition = OverlayPositionPreset.TopRight
             });
 
-            // Simulate drag to custom position: settings change to custom
+            // Simulate drag to custom position: settings change to custom with ratios.
             window.UpdateSettings(TraySettings.Default with
             {
                 OverlayPosition = null,
-                OverlayLeft = 500.0,
-                OverlayTop = 300.0
+                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+                OverlayXRatio = 0.5,
+                OverlayYRatio = 0.25
             });
 
-            double savedLeft = double.NaN, savedTop = double.NaN;
-            window.DragCompleted += (l, t) => { savedLeft = l; savedTop = t; };
+            bool dragFired = false;
+            window.DragCompleted += (_, _) => dragFired = true;
 
             interop.SetWindowPosCalls.Clear();
             window.ExecuteDpiRepositionCore();
 
-            // Should NOT have moved to a preset position (no SetWindowPos move call)
-            // Should have fired DragCompleted with current physical coords
-            Assert.Equal(500.0, savedLeft, 0);
-            Assert.Equal(300.0, savedTop, 0);
+            // Must NOT revert to the TopRight preset (1704, 16) and must NOT fire
+            // a fake DragCompleted. It re-anchors from the saved ratios (860, 230).
+            Assert.False(dragFired);
+            var moveCall = FindMoveCall(interop.SetWindowPosCalls);
+            Assert.NotNull(moveCall);
+            Assert.Equal(860, moveCall!.Value.X);
+            Assert.Equal(230, moveCall.Value.Y);
         });
     }
 
     [Fact]
-    public void ExecuteDpiRepositionCore_CustomDpiSync_SettingsStayConsistent()
+    public void ExecuteDpiRepositionCore_CustomDpiSync_ReanchorsFromRatios_WithoutDragCompleted()
     {
         WpfTestHelpers.RunInStaWithWpf(() =>
         {
             var provider = CreateSingleMonitorProvider(144);
             var interop = new FakeWindowNativeInterop();
-            // Window at physical (800, 600) after DPI change
+            // Window at physical (800, 600) after DPI change — an intermediate
+            // WPF placement that must NOT be written back to settings.
             interop.CurrentRect = new OverlayWindow.RECT { Left = 800, Top = 600, Right = 1000, Bottom = 720 };
 
             var window = new OverlayWindow(provider, interop);
 
-            // Custom position with old coords
+            // Custom position with normalized ratios (the source of truth).
             window.UpdateSettings(TraySettings.Default with
             {
                 OverlayPosition = null,
-                OverlayLeft = 750.0,
-                OverlayTop = 580.0
+                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+                OverlayXRatio = 0.5,
+                OverlayYRatio = 0.25
             });
 
-            double syncedLeft = double.NaN, syncedTop = double.NaN;
-            window.DragCompleted += (l, t) => { syncedLeft = l; syncedTop = t; };
+            bool dragFired = false;
+            window.DragCompleted += (_, _) => dragFired = true;
 
+            interop.SetWindowPosCalls.Clear();
             window.ExecuteDpiRepositionCore();
 
-            // The synced coordinates should be the final physical position, not the old saved coords
-            Assert.Equal(800.0, syncedLeft, 0);
-            Assert.Equal(600.0, syncedTop, 0);
-            Assert.NotEqual(750.0, syncedLeft);
-            Assert.NotEqual(580.0, syncedTop);
+            // The intermediate physical position (800, 600) is never saved; no
+            // fake DragCompleted fires. The window re-anchors to the ratios (860, 230).
+            Assert.False(dragFired);
+            var moveCall = FindMoveCall(interop.SetWindowPosCalls);
+            Assert.NotNull(moveCall);
+            Assert.Equal(860, moveCall!.Value.X);
+            Assert.Equal(230, moveCall.Value.Y);
         });
     }
 

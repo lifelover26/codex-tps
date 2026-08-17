@@ -423,6 +423,21 @@ public static class Localization
         };
     }
 
+    public static string CustomPositionMenu(Language language)
+    {
+        return language == Language.Chinese ? "自定义位置" : "Custom Position";
+    }
+
+    public static string GetCustomPositionModeDisplayName(OverlayCustomPositionMode mode, Language language)
+    {
+        return mode switch
+        {
+            OverlayCustomPositionMode.KeepRelative => language == Language.Chinese ? "保持相对位置" : "Keep Relative Position",
+            OverlayCustomPositionMode.RememberPerDisplay => language == Language.Chinese ? "按显示器记忆" : "Remember per display",
+            _ => language == Language.Chinese ? "保持相对位置" : "Keep Relative Position"
+        };
+    }
+
     public static string BackgroundOpacityMenu(Language language)
     {
         return language == Language.Chinese ? "背景不透明度" : "Background Opacity";

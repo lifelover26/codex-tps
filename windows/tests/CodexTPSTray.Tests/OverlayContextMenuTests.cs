@@ -60,12 +60,14 @@ public class OverlayContextMenuTests
         public List<OverlayPositionPreset> SelectPositionCalls { get; } = new();
         public List<OverlayOpacityPreference> SelectOpacityCalls { get; } = new();
         public List<OverlayThemePreference> SelectThemeCalls { get; } = new();
+        public List<OverlayCustomPositionMode> SelectCustomPositionModeCalls { get; } = new();
 
         public void ToggleOverlay(bool enabled) => ToggleOverlayCalls.Add(enabled);
         public void ToggleLock(bool locked) => ToggleLockCalls.Add(locked);
         public void SelectPosition(OverlayPositionPreset preset) => SelectPositionCalls.Add(preset);
         public void SelectOpacity(OverlayOpacityPreference opacity) => SelectOpacityCalls.Add(opacity);
         public void SelectTheme(OverlayThemePreference theme) => SelectThemeCalls.Add(theme);
+        public void SelectCustomPositionMode(OverlayCustomPositionMode mode) => SelectCustomPositionModeCalls.Add(mode);
     }
 
     private sealed class TestMenuStateProvider : IOverlayMenuStateProvider
@@ -349,7 +351,7 @@ public class OverlayContextMenuTests
             var cm = GetContextMenu(window);
             var items = cm.Items.Cast<object>().ToList();
 
-            Assert.Equal(6, items.Count);
+            Assert.Equal(7, items.Count);
             Assert.IsType<WpfMenuItem>(items[0]);
             Assert.Equal("ShowOverlayMenuItem", ((WpfMenuItem)items[0]).Name);
             Assert.IsType<WpfMenuItem>(items[1]);
@@ -358,9 +360,11 @@ public class OverlayContextMenuTests
             Assert.IsType<WpfMenuItem>(items[3]);
             Assert.Equal("PositionSubmenu", ((WpfMenuItem)items[3]).Name);
             Assert.IsType<WpfMenuItem>(items[4]);
-            Assert.Equal("OpacitySubmenu", ((WpfMenuItem)items[4]).Name);
+            Assert.Equal("CustomPositionSubmenu", ((WpfMenuItem)items[4]).Name);
             Assert.IsType<WpfMenuItem>(items[5]);
-            Assert.Equal("ThemeSubmenu", ((WpfMenuItem)items[5]).Name);
+            Assert.Equal("OpacitySubmenu", ((WpfMenuItem)items[5]).Name);
+            Assert.IsType<WpfMenuItem>(items[6]);
+            Assert.Equal("ThemeSubmenu", ((WpfMenuItem)items[6]).Name);
         });
     }
 
@@ -379,6 +383,123 @@ public class OverlayContextMenuTests
                 var expectedName = GetPositionItemName(OverlayMenuDefinition.PositionPresets[i]);
                 Assert.Equal(expectedName, children[i].Name);
             }
+        });
+    }
+
+    [Fact]
+    public void CustomPositionSubmenu_HasBothModesInOrder()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = CreateTestWindow();
+            var sub = (WpfMenuItem)window.FindName("CustomPositionSubmenu")!;
+            var children = sub.Items.Cast<WpfMenuItem>().ToList();
+
+            Assert.Equal(2, children.Count);
+            Assert.Equal("CustomPositionKeepRelative", children[0].Name);
+            Assert.Equal("CustomPositionRememberPerDisplay", children[1].Name);
+        });
+    }
+
+    [Fact]
+    public void CustomPositionSubmenu_KeepRelative_CheckedByDefault()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var state = new TestMenuStateProvider
+            {
+                CurrentSettings = TraySettings.Default with { OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative },
+                IsOverlayVisible = true
+            };
+            var window = CreateTestWindow(stateProvider: state);
+            window.UpdateSettings(state.CurrentSettings);
+            window.UpdateContextMenuState();
+
+            var keepRelative = (WpfMenuItem)window.FindName("CustomPositionKeepRelative")!;
+            var remember = (WpfMenuItem)window.FindName("CustomPositionRememberPerDisplay")!;
+
+            Assert.True(keepRelative.IsChecked);
+            Assert.False(remember.IsChecked);
+        });
+    }
+
+    [Fact]
+    public void CustomPositionSubmenu_RememberPerDisplay_CheckedWhenSelected()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var state = new TestMenuStateProvider
+            {
+                CurrentSettings = TraySettings.Default with { OverlayCustomPositionMode = OverlayCustomPositionMode.RememberPerDisplay },
+                IsOverlayVisible = true
+            };
+            var window = CreateTestWindow(stateProvider: state);
+            window.UpdateSettings(state.CurrentSettings);
+            window.UpdateContextMenuState();
+
+            var keepRelative = (WpfMenuItem)window.FindName("CustomPositionKeepRelative")!;
+            var remember = (WpfMenuItem)window.FindName("CustomPositionRememberPerDisplay")!;
+
+            Assert.False(keepRelative.IsChecked);
+            Assert.True(remember.IsChecked);
+        });
+    }
+
+    [Fact]
+    public void CustomPositionSubmenu_ClickRememberPerDisplay_FiresCommand()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var handler = new CapturingMenuCommandHandler();
+            var window = CreateTestWindow(handler: handler);
+            window.UpdateSettings(TraySettings.Default);
+
+            var remember = (WpfMenuItem)window.FindName("CustomPositionRememberPerDisplay")!;
+            remember.IsChecked = true;
+            remember.RaiseEvent(new RoutedEventArgs(WpfMenuItem.ClickEvent, remember));
+
+            Assert.Single(handler.SelectCustomPositionModeCalls);
+            Assert.Equal(OverlayCustomPositionMode.RememberPerDisplay, handler.SelectCustomPositionModeCalls[0]);
+        });
+    }
+
+    [Fact]
+    public void CustomPositionSubmenu_HeaderLocalization_English()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var state = new TestMenuStateProvider
+            {
+                CurrentSettings = TraySettings.Default with { Language = Language.English },
+                IsOverlayVisible = true
+            };
+            var window = CreateTestWindow(stateProvider: state);
+            window.UpdateSettings(state.CurrentSettings);
+            window.UpdateContextMenuState();
+
+            Assert.Equal("Custom Position", ((WpfMenuItem)window.FindName("CustomPositionSubmenu")!).Header);
+            Assert.Equal("Keep Relative Position", ((WpfMenuItem)window.FindName("CustomPositionKeepRelative")!).Header);
+            Assert.Equal("Remember per display", ((WpfMenuItem)window.FindName("CustomPositionRememberPerDisplay")!).Header);
+        });
+    }
+
+    [Fact]
+    public void CustomPositionSubmenu_HeaderLocalization_Chinese()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var state = new TestMenuStateProvider
+            {
+                CurrentSettings = TraySettings.Default with { Language = Language.Chinese },
+                IsOverlayVisible = true
+            };
+            var window = CreateTestWindow(stateProvider: state);
+            window.UpdateSettings(state.CurrentSettings);
+            window.UpdateContextMenuState();
+
+            Assert.Equal("自定义位置", ((WpfMenuItem)window.FindName("CustomPositionSubmenu")!).Header);
+            Assert.Equal("保持相对位置", ((WpfMenuItem)window.FindName("CustomPositionKeepRelative")!).Header);
+            Assert.Equal("按显示器记忆", ((WpfMenuItem)window.FindName("CustomPositionRememberPerDisplay")!).Header);
         });
     }
 

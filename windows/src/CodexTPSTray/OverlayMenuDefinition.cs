@@ -15,6 +15,9 @@ internal static class OverlayMenuDefinition
     public static IReadOnlyList<OverlayThemePreference> ThemePreferences { get; } =
         Enum.GetValues<OverlayThemePreference>();
 
+    public static IReadOnlyList<OverlayCustomPositionMode> CustomPositionModes { get; } =
+        Enum.GetValues<OverlayCustomPositionMode>();
+
     public static string GetPositionText(OverlayPositionPreset preset, Language language)
         => Localization.GetPositionPresetDisplayName(preset, language);
 
@@ -23,4 +26,7 @@ internal static class OverlayMenuDefinition
 
     public static string GetThemeText(OverlayThemePreference theme, Language language)
         => Localization.GetOverlayThemeDisplayName(theme, language);
+
+    public static string GetCustomPositionModeText(OverlayCustomPositionMode mode, Language language)
+        => Localization.GetCustomPositionModeDisplayName(mode, language);
 }

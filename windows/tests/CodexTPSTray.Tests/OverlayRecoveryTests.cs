@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using Microsoft.Win32;
 using Xunit;
@@ -457,12 +458,19 @@ public class OverlayTopmostRecoveryCoordinatorTests
         public bool IsVisible { get; set; } = true;
         public bool IsEnabled { get; set; } = true;
         public int ReassertCount { get; private set; }
+        public int ReconcileCount { get; private set; }
         public List<string> CallOrder { get; } = new();
 
         public void ReassertTopmost()
         {
             ReassertCount++;
             CallOrder.Add("Reassert");
+        }
+
+        public void ReconcilePlacement()
+        {
+            ReconcileCount++;
+            CallOrder.Add("Reconcile");
         }
     }
 
@@ -728,6 +736,127 @@ public class OverlayTopmostRecoveryCoordinatorTests
         Assert.Equal(0, target.ReassertCount);
         Assert.Single(dispatcher.QueuedActions);
     }
+
+    // ======================================================================
+    // ReconcilePlacement tests
+    // ======================================================================
+
+    [Fact]
+    public void ImmediateDispatch_VisibleAndEnabled_ReconcilesPlacement()
+    {
+        var (src, dispatcher, target, _, coord) = CreateCoordinator();
+        coord.Start();
+
+        src.RaiseEvent();
+        dispatcher.ExecuteAll();
+
+        Assert.Equal(1, target.ReconcileCount);
+    }
+
+    [Fact]
+    public void DelayedRetry_WhenFired_ReconcilesPlacementAgain()
+    {
+        var (src, dispatcher, target, timer, coord) = CreateCoordinator();
+        coord.Start();
+
+        src.RaiseEvent();
+        dispatcher.ExecuteAll();
+        timer.FireLastCallback();
+
+        Assert.Equal(2, target.ReconcileCount);
+    }
+
+    [Fact]
+    public void ImmediateDispatch_HiddenWindow_DoesNotReconcile()
+    {
+        var target = new FakeRecoveryTarget { IsVisible = false };
+        var (src, dispatcher, _, timer, coord) = CreateCoordinator(target: target);
+        coord.Start();
+
+        src.RaiseEvent();
+        dispatcher.ExecuteAll();
+
+        Assert.Equal(0, target.ReconcileCount);
+        Assert.Equal(1, timer.RestartCount);
+    }
+
+    [Fact]
+    public void ImmediateDispatch_Disabled_DoesNotReconcile()
+    {
+        var target = new FakeRecoveryTarget { IsEnabled = false };
+        var (src, dispatcher, _, timer, coord) = CreateCoordinator(target: target);
+        coord.Start();
+
+        src.RaiseEvent();
+        dispatcher.ExecuteAll();
+
+        Assert.Equal(0, target.ReconcileCount);
+        Assert.Equal(1, timer.RestartCount);
+    }
+
+    [Fact]
+    public void DelayedRetry_HiddenWindow_DoesNotReconcile()
+    {
+        var (src, dispatcher, target, timer, coord) = CreateCoordinator();
+        coord.Start();
+
+        src.RaiseEvent();
+        dispatcher.ExecuteAll();
+        Assert.Equal(1, target.ReconcileCount);
+
+        target.IsVisible = false;
+        timer.FireLastCallback();
+        Assert.Equal(1, target.ReconcileCount);
+    }
+
+    [Fact]
+    public void ReconcilePlacement_CalledAfterReassert()
+    {
+        var (src, dispatcher, target, _, coord) = CreateCoordinator();
+        coord.Start();
+
+        src.RaiseEvent();
+        dispatcher.ExecuteAll();
+
+        // Reassert should come before Reconcile in the call order
+        Assert.Equal(2, target.CallOrder.Count);
+        Assert.Equal("Reassert", target.CallOrder[0]);
+        Assert.Equal("Reconcile", target.CallOrder[1]);
+    }
+
+    [Fact]
+    public void MultipleEvents_ImmediateAndDelayed_BothReconcile()
+    {
+        var (src, dispatcher, target, timer, coord) = CreateCoordinator();
+        coord.Start();
+
+        src.RaiseEvent();
+        dispatcher.ExecuteAll();
+        src.RaiseEvent();
+        dispatcher.ExecuteAll();
+        src.RaiseEvent();
+        dispatcher.ExecuteAll();
+
+        timer.FireLastCallback();
+
+        // 3 immediate + 1 delayed = 4 reasserts and 4 reconciles
+        Assert.Equal(4, target.ReconcileCount);
+    }
+
+    [Fact]
+    public void PrepareForShutdown_DelayedCallbackDoesNotReconcile()
+    {
+        var (src, dispatcher, target, timer, coord) = CreateCoordinator();
+        coord.Start();
+
+        src.RaiseEvent();
+        dispatcher.ExecuteAll();
+        Assert.Equal(1, target.ReconcileCount);
+
+        coord.PrepareForShutdown();
+        timer.FireLastCallback();
+        Assert.Equal(1, target.ReconcileCount);
+    }
 }
 
 public class OverlayWindowReassertTopmostTests
@@ -789,6 +918,274 @@ public class OverlayWindowReassertTopmostTests
             Assert.Equal(0, last.CY);
             uint expectedFlags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED;
             Assert.Equal(expectedFlags, last.Flags);
+        });
+    }
+}
+
+public class OverlayWindowReconcilePlacementTests
+{
+    private static readonly IntPtr FakeHwnd = new(0x9ABC);
+    private const uint SWP_NOMOVE = 0x0002;
+
+    /// <summary>
+    /// Mutable work area provider that allows tests to simulate display
+    /// configuration changes (resolution, topology, connect/disconnect) between
+    /// ReconcilePlacement calls.
+    /// </summary>
+    private sealed class MutableWorkAreaProvider : IMonitorWorkAreaProvider
+    {
+        public Rect PrimaryWorkArea { get; set; }
+        public IReadOnlyList<MonitorInfo> Monitors { get; set; } = Array.Empty<MonitorInfo>();
+
+        public Rect GetPrimaryWorkArea() => PrimaryWorkArea;
+        public IReadOnlyList<Rect> GetAllWorkAreas() => Monitors.Select(m => m.WorkingArea).ToList();
+        public IReadOnlyList<MonitorInfo> GetAllMonitorInfos() => Monitors;
+    }
+
+    private sealed class FakeWindowNativeInterop : OverlayWindow.IWindowNativeInterop
+    {
+        public OverlayWindow.RECT CurrentRect;
+        public List<(int X, int Y, uint Flags)> SetWindowPosCalls { get; } = new();
+        public int ExtendedStyle;
+
+        public IntPtr GetHandle(Window window) => FakeHwnd;
+
+        public bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags)
+        {
+            SetWindowPosCalls.Add((X, Y, uFlags));
+            return true;
+        }
+
+        public bool GetWindowRect(IntPtr hWnd, out OverlayWindow.RECT lpRect)
+        {
+            lpRect = CurrentRect;
+            return true;
+        }
+
+        public int GetWindowLong(IntPtr hWnd, int nIndex) => ExtendedStyle;
+        public int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong)
+        {
+            int old = ExtendedStyle;
+            ExtendedStyle = dwNewLong;
+            return old;
+        }
+    }
+
+    private static (int X, int Y, uint Flags)? FindMoveCall(IList<(int X, int Y, uint Flags)> calls)
+    {
+        for (int i = calls.Count - 1; i >= 0; i--)
+        {
+            if ((calls[i].Flags & SWP_NOMOVE) == 0)
+                return calls[i];
+        }
+        return null;
+    }
+
+    [Fact]
+    public void ReconcilePlacement_WorkAreaChange_ReanchorsToNewWorkArea()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var provider = new MutableWorkAreaProvider
+            {
+                PrimaryWorkArea = new Rect(0, 0, 1920, 1040),
+                Monitors = new[]
+                {
+                    new MonitorInfo(@"\\.\DISPLAY1", new Rect(0, 0, 1920, 1040), true)
+                }
+            };
+            var interop = new FakeWindowNativeInterop();
+            interop.CurrentRect = new OverlayWindow.RECT { Left = 860, Top = 230, Right = 1060, Bottom = 350 };
+
+            var window = new OverlayWindow(provider, interop);
+            window.UpdateSettings(TraySettings.Default with
+            {
+                OverlayPosition = null,
+                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+                OverlayXRatio = 0.5,
+                OverlayYRatio = 0.25
+            });
+
+            // Original: 0.5 * (1920-200) = 860, 0.25 * (1040-120) = 230
+            interop.SetWindowPosCalls.Clear();
+            window.ExecuteDpiRepositionCore();
+            var firstMove = FindMoveCall(interop.SetWindowPosCalls);
+            Assert.NotNull(firstMove);
+            Assert.Equal(860, firstMove!.Value.X);
+            Assert.Equal(230, firstMove.Value.Y);
+
+            // Simulate resolution change: 2560x1440 work area (same DPI).
+            provider.PrimaryWorkArea = new Rect(0, 0, 2560, 1440);
+            provider.Monitors = new[]
+            {
+                new MonitorInfo(@"\\.\DISPLAY1", new Rect(0, 0, 2560, 1440), true)
+            };
+
+            interop.SetWindowPosCalls.Clear();
+            window.ExecuteDpiRepositionCore();
+            var secondMove = FindMoveCall(interop.SetWindowPosCalls);
+
+            // Same ratios against new work area: 0.5 * (2560-200) = 1180, 0.25 * (1440-120) = 330
+            Assert.NotNull(secondMove);
+            Assert.Equal(1180, secondMove!.Value.X);
+            Assert.Equal(330, secondMove.Value.Y);
+        });
+    }
+
+    [Fact]
+    public void ReconcilePlacement_DisplayDisconnected_FallsBack_ReconnectRestores()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var primary = new MonitorInfo(@"\\.\DISPLAY1", new Rect(0, 0, 1920, 1040), true);
+            var secondary = new MonitorInfo(@"\\.\DISPLAY2", new Rect(1920, 0, 1920, 1040), false);
+
+            var provider = new MutableWorkAreaProvider
+            {
+                PrimaryWorkArea = primary.WorkingArea,
+                Monitors = new[] { primary, secondary }
+            };
+            var interop = new FakeWindowNativeInterop();
+            interop.CurrentRect = new OverlayWindow.RECT { Left = 2200, Top = 400, Right = 2400, Bottom = 520 };
+
+            var window = new OverlayWindow(provider, interop);
+            window.UpdateSettings(TraySettings.Default with
+            {
+                OverlayPosition = null,
+                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+                OverlayXRatio = 0.5,
+                OverlayYRatio = 0.25,
+                OverlayCustomMonitorId = @"\\.\DISPLAY2"
+            });
+
+            // Verify it targets the secondary display.
+            interop.SetWindowPosCalls.Clear();
+            window.ExecuteDpiRepositionCore();
+            var onSecondary = FindMoveCall(interop.SetWindowPosCalls);
+            Assert.NotNull(onSecondary);
+            Assert.True(onSecondary!.Value.X >= 1920);
+
+            // Secondary disconnected — only primary remains.
+            provider.Monitors = new[] { primary };
+            interop.CurrentRect = new OverlayWindow.RECT { Left = 100, Top = 100, Right = 300, Bottom = 220 };
+
+            interop.SetWindowPosCalls.Clear();
+            window.ExecuteDpiRepositionCore();
+            var fallback = FindMoveCall(interop.SetWindowPosCalls);
+            Assert.NotNull(fallback);
+            // Fallback lands on primary (X < 1920).
+            Assert.True(fallback!.Value.X < 1920);
+
+            // Secondary reconnected — should restore to the original target.
+            provider.Monitors = new[] { primary, secondary };
+
+            interop.SetWindowPosCalls.Clear();
+            window.ExecuteDpiRepositionCore();
+            var restored = FindMoveCall(interop.SetWindowPosCalls);
+            Assert.NotNull(restored);
+            // Restored to secondary display.
+            Assert.True(restored!.Value.X >= 1920);
+            // Same relative position: 0.5 * (1920-200) + 1920 = 2780
+            Assert.Equal(2780, restored.Value.X);
+        });
+    }
+
+    [Fact]
+    public void ReconcilePlacement_RepeatedCalls_NoDriftNoDragCompleted()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var provider = new MutableWorkAreaProvider
+            {
+                PrimaryWorkArea = new Rect(0, 0, 1920, 1040),
+                Monitors = new[]
+                {
+                    new MonitorInfo(@"\\.\DISPLAY1", new Rect(0, 0, 1920, 1040), true)
+                }
+            };
+            var interop = new FakeWindowNativeInterop();
+            interop.CurrentRect = new OverlayWindow.RECT { Left = 860, Top = 230, Right = 1060, Bottom = 350 };
+
+            var window = new OverlayWindow(provider, interop);
+            int dragCount = 0;
+            window.DragCompleted += (_, _) => dragCount++;
+
+            window.UpdateSettings(TraySettings.Default with
+            {
+                OverlayPosition = null,
+                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+                OverlayXRatio = 0.5,
+                OverlayYRatio = 0.25
+            });
+
+            // Call ReconcilePlacement (via ExecuteDpiRepositionCore) multiple times.
+            interop.SetWindowPosCalls.Clear();
+            window.ExecuteDpiRepositionCore();
+            var firstMove = FindMoveCall(interop.SetWindowPosCalls);
+
+            interop.SetWindowPosCalls.Clear();
+            window.ExecuteDpiRepositionCore();
+            var secondMove = FindMoveCall(interop.SetWindowPosCalls);
+
+            interop.SetWindowPosCalls.Clear();
+            window.ExecuteDpiRepositionCore();
+            var thirdMove = FindMoveCall(interop.SetWindowPosCalls);
+
+            // All calls produce the same position — no cumulative drift.
+            Assert.NotNull(firstMove);
+            Assert.NotNull(secondMove);
+            Assert.NotNull(thirdMove);
+            Assert.Equal(firstMove!.Value.X, secondMove!.Value.X);
+            Assert.Equal(firstMove.Value.Y, secondMove.Value.Y);
+            Assert.Equal(firstMove.Value.X, thirdMove!.Value.X);
+            Assert.Equal(firstMove.Value.Y, thirdMove.Value.Y);
+
+            // No DragCompleted ever fires from auto-reposition.
+            Assert.Equal(0, dragCount);
+        });
+    }
+
+    [Fact]
+    public void ReconcilePlacement_DuringDrag_DoesNotReposition()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var provider = new MutableWorkAreaProvider
+            {
+                PrimaryWorkArea = new Rect(0, 0, 1920, 1040),
+                Monitors = new[]
+                {
+                    new MonitorInfo(@"\\.\DISPLAY1", new Rect(0, 0, 1920, 1040), true)
+                }
+            };
+            var interop = new FakeWindowNativeInterop();
+            interop.CurrentRect = new OverlayWindow.RECT { Left = 500, Top = 300, Right = 700, Bottom = 420 };
+
+            var window = new OverlayWindow(provider, interop);
+
+            window.UpdateSettings(TraySettings.Default with
+            {
+                OverlayPosition = null,
+                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+                OverlayXRatio = 0.5,
+                OverlayYRatio = 0.25
+            });
+
+            // Start a drag (sets _isDragging = true).
+            window.HandleMouseLeftButtonDown(new System.Drawing.Point(600, 400), shiftHeld: false);
+            Assert.True(window.IsDragging);
+
+            interop.SetWindowPosCalls.Clear();
+            // ExecuteDpiReposition (called by ReconcilePlacement) must bail out
+            // because _isDragging is true.
+            window.ExecuteDpiReposition();
+
+            // No move call should have been made.
+            var moveCall = FindMoveCall(interop.SetWindowPosCalls);
+            Assert.Null(moveCall);
+
+            // Clean up drag state.
+            window.EndDrag();
         });
     }
 }

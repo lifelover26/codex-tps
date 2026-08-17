@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CodexTPSCore;
 
 namespace CodexTPSTray;
@@ -6,7 +7,9 @@ namespace CodexTPSTray;
 // it carries every field the legacy call sites pass and implicitly defaults
 // DataSource to Windows. A secondary constructor (at the bottom of the type)
 // accepts an explicit DataSource for callers — notably TraySettingsStore —
-// that need to materialize a persisted WSL selection.
+// that need to materialize a persisted WSL selection. A third constructor
+// accepts all fields including the custom-position ratios, per-display map,
+// and target-monitor ID added for normalized overlay positioning.
 //
 // DataSource is a non-nullable init-only property backed by a private field.
 // The field defaults to CodexDataSourceSelection.Windows, so every TraySettings
@@ -16,7 +19,7 @@ namespace CodexTPSTray;
 //
 // The custom init accessor is the single null-rejection point: it throws
 // ArgumentNullException for a null assignment, whether that assignment comes
-// from the secondary constructor or from a `with { DataSource = ... }`
+// from a secondary constructor or from a `with { DataSource = ... }`
 // expression. This closes the `with { DataSource = null! }` bypass that an
 // auto-implemented init accessor would otherwise allow. A legitimate
 // `with { DataSource = CodexDataSourceSelection.ForWsl("Ubuntu") }` continues
@@ -43,7 +46,7 @@ public record TraySettings(
     private CodexDataSourceSelection _dataSource = CodexDataSourceSelection.Windows;
 
     // The custom init accessor is the single null-rejection point. It applies
-    // to the secondary constructor below AND to `with { DataSource = ... }`,
+    // to the secondary constructors below AND to `with { DataSource = ... }`,
     // so `with { DataSource = null! }` throws rather than producing a null
     // field. A non-null, already-validated CodexDataSourceSelection is stored
     // directly (the selection itself enforces Kind/name invariants).
@@ -54,11 +57,21 @@ public record TraySettings(
             value ?? throw new ArgumentNullException(nameof(DataSource));
     }
 
-    // Full constructor: lets TraySettingsStore (and any future caller) supply
-    // an explicit DataSource. Forwards to the compatibility constructor for
-    // every other field, then routes the argument through the init accessor so
-    // null rejection lives in exactly one place (the accessor) instead of
-    // being duplicated here.
+    // Custom-position properties (normalized coordinate model). These are
+    // init-only auto-properties with safe defaults so that legacy call sites
+    // that use the 12-parameter primary constructor automatically get the
+    // KeepRelative default with no ratios/per-display map/target monitor.
+    public OverlayCustomPositionMode OverlayCustomPositionMode { get; init; } = OverlayCustomPositionMode.KeepRelative;
+    public double? OverlayXRatio { get; init; } = null;
+    public double? OverlayYRatio { get; init; } = null;
+    public IReadOnlyDictionary<string, DisplayRelativePosition>? OverlayPerDisplayPositions { get; init; } = null;
+    public string? OverlayCustomMonitorId { get; init; } = null;
+
+    // Compatibility constructor: 12 original parameters + explicit DataSource.
+    // Used by TraySettingsDataSourceTests.FullConstructor_* and any other legacy
+    // call site that names the DataSource parameter. Custom-position fields
+    // receive their property defaults (KeepRelative, null ratios, null map,
+    // null target monitor).
     public TraySettings(
         MetricWindow SelectedWindow,
         RefreshCadence RefreshCadence,
@@ -90,6 +103,54 @@ public record TraySettings(
         this.DataSource = DataSource;
     }
 
+    // Full constructor: accepts every field including the five custom-position
+    // properties and an explicit DataSource. Used by TraySettingsStore when
+    // materializing persisted settings and by OverlayCustomPositionCoordinator
+    // when producing updated settings after migration or first-seen
+    // inheritance. Forwards to the 12-parameter primary constructor then sets
+    // the remaining properties through their init accessors so that the
+    // DataSource null-rejection logic lives in exactly one place.
+    public TraySettings(
+        MetricWindow SelectedWindow,
+        RefreshCadence RefreshCadence,
+        Language Language,
+        bool OverlayEnabled,
+        bool OverlayLocked,
+        double? OverlayLeft,
+        double? OverlayTop,
+        ApplicationThemePreference ApplicationTheme,
+        OverlayThemePreference OverlayTheme,
+        OverlayOpacityPreference OverlayOpacity,
+        OverlayPositionPreset? OverlayPosition,
+        string? OverlayMonitorDeviceName,
+        OverlayCustomPositionMode OverlayCustomPositionMode,
+        double? OverlayXRatio,
+        double? OverlayYRatio,
+        IReadOnlyDictionary<string, DisplayRelativePosition>? OverlayPerDisplayPositions,
+        string? OverlayCustomMonitorId,
+        CodexDataSourceSelection DataSource)
+        : this(
+            SelectedWindow,
+            RefreshCadence,
+            Language,
+            OverlayEnabled,
+            OverlayLocked,
+            OverlayLeft,
+            OverlayTop,
+            ApplicationTheme,
+            OverlayTheme,
+            OverlayOpacity,
+            OverlayPosition,
+            OverlayMonitorDeviceName)
+    {
+        this.OverlayCustomPositionMode = OverlayCustomPositionMode;
+        this.OverlayXRatio = OverlayXRatio;
+        this.OverlayYRatio = OverlayYRatio;
+        this.OverlayPerDisplayPositions = OverlayPerDisplayPositions;
+        this.OverlayCustomMonitorId = OverlayCustomMonitorId;
+        this.DataSource = DataSource;
+    }
+
     public static TraySettings Default { get; } = new(
         SelectedWindow: MetricWindow.OneMinute,
         RefreshCadence: RefreshCadence.FifteenSeconds,
@@ -103,5 +164,12 @@ public record TraySettings(
         OverlayOpacity: OverlayOpacityPreference.Default,
         OverlayPosition: OverlayPositionPreset.TopRight,
         OverlayMonitorDeviceName: null
-    );
+    )
+    {
+        OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
+        OverlayXRatio = null,
+        OverlayYRatio = null,
+        OverlayPerDisplayPositions = null,
+        OverlayCustomMonitorId = null
+    };
 }
