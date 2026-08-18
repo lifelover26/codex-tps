@@ -74,7 +74,7 @@ public partial class OverlayWindow : Window
     private readonly Dictionary<OverlayPositionPreset, WpfMenuItem> _positionMenuItems = new();
     private readonly Dictionary<OverlayOpacityPreference, WpfMenuItem> _opacityMenuItems = new();
     private readonly Dictionary<OverlayThemePreference, WpfMenuItem> _themeMenuItems = new();
-    private readonly Dictionary<OverlayCustomPositionMode, WpfMenuItem> _customPositionModeMenuItems = new();
+    private readonly Dictionary<OverlayPositionMemoryMode, WpfMenuItem> _positionMemoryModeMenuItems = new();
 
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -225,8 +225,8 @@ public partial class OverlayWindow : Window
         _themeMenuItems[OverlayThemePreference.Light] = ThemeLight;
         _themeMenuItems[OverlayThemePreference.Dark] = ThemeDark;
 
-        _customPositionModeMenuItems[OverlayCustomPositionMode.KeepRelative] = CustomPositionKeepRelative;
-        _customPositionModeMenuItems[OverlayCustomPositionMode.RememberPerDisplay] = CustomPositionRememberPerDisplay;
+        _positionMemoryModeMenuItems[OverlayPositionMemoryMode.SharedAcrossDisplays] = PositionMemoryShared;
+        _positionMemoryModeMenuItems[OverlayPositionMemoryMode.RememberPerDisplay] = PositionMemoryRememberPerDisplay;
     }
 
     internal void SetOverlayMenuCommandHandler(IOverlayMenuCommandHandler handler)
@@ -267,10 +267,11 @@ public partial class OverlayWindow : Window
         ShowOverlayMenuItem.IsChecked = settings.OverlayEnabled;
         LockOverlayMenuItem.IsChecked = settings.OverlayLocked;
 
+        OverlayPositionPreset? activePreset = ResolveActivePreset(settings);
         foreach (var preset in OverlayMenuDefinition.PositionPresets)
         {
             var item = _positionMenuItems[preset];
-            item.IsChecked = preset == settings.OverlayPosition;
+            item.IsChecked = preset == activePreset;
             item.IsEnabled = isVisible;
         }
 
@@ -285,12 +286,60 @@ public partial class OverlayWindow : Window
             _themeMenuItems[theme].IsChecked = theme == overlayTheme;
         }
 
-        foreach (var mode in OverlayMenuDefinition.CustomPositionModes)
+        foreach (var mode in OverlayMenuDefinition.PositionMemoryModes)
         {
-            _customPositionModeMenuItems[mode].IsChecked = mode == settings.OverlayCustomPositionMode;
+            _positionMemoryModeMenuItems[mode].IsChecked = mode == settings.PositionMemoryMode;
         }
 
         UpdateMenuLocalization(settings.Language);
+    }
+
+    private OverlayPositionPreset? ResolveActivePreset(TraySettings settings)
+    {
+        var (allMonitors, primary) = GetMonitorsAndPrimary();
+        IntPtr hwnd = _native.GetHandle(this);
+        double currentLeft = 0.0;
+        double currentTop = 0.0;
+        double width = 200.0;
+        double height = 120.0;
+        if (hwnd != IntPtr.Zero && _native.GetWindowRect(hwnd, out RECT rect))
+        {
+            currentLeft = rect.Left;
+            currentTop = rect.Top;
+            width = rect.Right - rect.Left;
+            height = rect.Bottom - rect.Top;
+        }
+
+        if (width <= 0 || height <= 0)
+        {
+            width = 200.0;
+            height = 120.0;
+        }
+
+        MonitorInfo currentMonitor = OverlayPositionCalculator.FindBestMonitor(
+            currentLeft, currentTop, width, height, allMonitors, primary);
+        return OverlayPositionCoordinator.GetActivePreset(settings, currentMonitor);
+    }
+
+    private (IReadOnlyList<MonitorInfo> All, MonitorInfo Primary) GetMonitorsAndPrimary()
+    {
+        var all = _workAreaProvider.GetAllMonitorInfos();
+        var primaryWorkArea = _workAreaProvider.GetPrimaryWorkArea();
+        MonitorInfo primary = new MonitorInfo(
+            DeviceName: string.Empty,
+            WorkingArea: primaryWorkArea,
+            IsPrimary: true);
+
+        foreach (var info in all)
+        {
+            if (info.IsPrimary)
+            {
+                primary = info;
+                break;
+            }
+        }
+
+        return (all, primary);
     }
 
     private void UpdateMenuLocalization(Language language)
@@ -298,7 +347,7 @@ public partial class OverlayWindow : Window
         ShowOverlayMenuItem.Header = Localization.ShowOverlayMenu(language);
         LockOverlayMenuItem.Header = Localization.LockOverlayMenu(language);
         PositionSubmenu.Header = Localization.PositionMenu(language);
-        CustomPositionSubmenu.Header = Localization.CustomPositionMenu(language);
+        PositionMemorySubmenu.Header = Localization.PositionMemoryMenu(language);
         OpacitySubmenu.Header = Localization.BackgroundOpacityMenu(language);
         ThemeSubmenu.Header = Localization.OverlayThemeMenu(language);
 
@@ -317,9 +366,9 @@ public partial class OverlayWindow : Window
             _themeMenuItems[theme].Header = OverlayMenuDefinition.GetThemeText(theme, language);
         }
 
-        foreach (var mode in OverlayMenuDefinition.CustomPositionModes)
+        foreach (var mode in OverlayMenuDefinition.PositionMemoryModes)
         {
-            _customPositionModeMenuItems[mode].Header = OverlayMenuDefinition.GetCustomPositionModeText(mode, language);
+            _positionMemoryModeMenuItems[mode].Header = OverlayMenuDefinition.GetPositionMemoryModeText(mode, language);
         }
     }
 
@@ -392,18 +441,18 @@ public partial class OverlayWindow : Window
         }
     }
 
-    private void OnCustomPositionModeClicked(object sender, RoutedEventArgs e)
+    private void OnPositionMemoryModeClicked(object sender, RoutedEventArgs e)
     {
         if (_menuCommandHandler == null || _isLocked || _isShuttingDown || sender is not WpfMenuItem item)
             return;
 
         OverlayContextMenu.IsOpen = false;
 
-        foreach (var kvp in _customPositionModeMenuItems)
+        foreach (var kvp in _positionMemoryModeMenuItems)
         {
             if (kvp.Value == item)
             {
-                _menuCommandHandler.SelectCustomPositionMode(kvp.Key);
+                _menuCommandHandler.SelectPositionMemoryMode(kvp.Key);
                 return;
             }
         }
@@ -960,70 +1009,28 @@ public partial class OverlayWindow : Window
 
     public (double Left, double Top) ResolvePosition(TraySettings settings, double width, double height)
     {
-        System.Windows.Size overlaySize = new System.Windows.Size(width, height);
-        Thickness dipMargin = new Thickness(16);
+        var (allMonitors, primaryMonitor) = GetMonitorsAndPrimary();
 
-        if (settings.OverlayPosition.HasValue)
-        {
-            var allMonitorInfos = _workAreaProvider.GetAllMonitorInfos();
-            var primaryWorkArea = _workAreaProvider.GetPrimaryWorkArea();
-
-            MonitorInfo primaryMonitorInfo = new MonitorInfo(
-                DeviceName: string.Empty,
-                WorkingArea: primaryWorkArea,
-                IsPrimary: true
-            );
-
-            foreach (var info in allMonitorInfos)
-            {
-                if (info.IsPrimary)
-                {
-                    primaryMonitorInfo = info;
-                    break;
-                }
-            }
-
-            MonitorInfo targetMonitor = OverlayPositionCalculator.ResolveTargetMonitor(
-                settings.OverlayMonitorDeviceName,
-                allMonitorInfos,
-                primaryMonitorInfo);
-
-            Thickness physicalMargin = DpiHelper.ConvertDipMarginToPhysical(dipMargin, targetMonitor.DpiX, targetMonitor.DpiY);
-
-            return OverlayPositionCalculator.CalculatePresetPosition(
-                settings.OverlayPosition.Value,
-                overlaySize,
-                targetMonitor.WorkingArea,
-                physicalMargin
-            );
-        }
-
-        var allMonitorInfosForCustom = _workAreaProvider.GetAllMonitorInfos();
-        MonitorInfo primaryMonitor = allMonitorInfosForCustom.FirstOrDefault(i => i.IsPrimary)
-            ?? new MonitorInfo(string.Empty, _workAreaProvider.GetPrimaryWorkArea(), true);
-
-        // Resolve the current physical position so the coordinator can determine
-        // which monitor the overlay currently occupies. On first show this is the
-        // WPF default placement (typically the primary monitor); on DPI/display
-        // changes it is the live HWND position. Falls back to (0,0) — which
-        // FindBestMonitor maps to the primary — when the HWND is unavailable.
         double currentLeft = 0.0;
         double currentTop = 0.0;
-        IntPtr hwndForCustom = _native.GetHandle(this);
-        if (hwndForCustom != IntPtr.Zero && _native.GetWindowRect(hwndForCustom, out RECT currentCustomRect))
+        IntPtr hwnd = _native.GetHandle(this);
+        if (hwnd != IntPtr.Zero && _native.GetWindowRect(hwnd, out RECT currentRect))
         {
-            currentLeft = currentCustomRect.Left;
-            currentTop = currentCustomRect.Top;
+            currentLeft = currentRect.Left;
+            currentTop = currentRect.Top;
         }
 
-        var (resolvedLeft, resolvedTop, updatedSettings) = OverlayCustomPositionCoordinator.ResolveRestorePosition(
+        Thickness dipMargin = new Thickness(16);
+
+        var (resolvedLeft, resolvedTop, updatedSettings) = OverlayPositionCoordinator.ResolveRestorePosition(
             settings,
             currentLeft,
             currentTop,
             width,
             height,
-            allMonitorInfosForCustom,
-            primaryMonitor);
+            allMonitors,
+            primaryMonitor,
+            dipMargin);
 
         if (updatedSettings != null)
         {

@@ -69,8 +69,10 @@ public class TraySettingsDataSourceTests : IDisposable
             ApplicationTheme: ApplicationThemePreference.System,
             OverlayTheme: OverlayThemePreference.FollowApplication,
             OverlayOpacity: OverlayOpacityPreference.Default,
-            OverlayPosition: OverlayPositionPreset.TopRight,
-            OverlayMonitorDeviceName: null,
+            PositionMemoryMode: OverlayPositionMemoryMode.SharedAcrossDisplays,
+            SharedPosition: new OverlayPositionState.Preset(OverlayPositionPreset.TopRight),
+            PerDisplayPositions: null,
+            OverlayTargetMonitorId: null,
             DataSource: CodexDataSourceSelection.ForWsl("Ubuntu"));
 
         Assert.Equal(CodexDataSourceKind.Wsl, settings.DataSource.Kind);
@@ -92,8 +94,10 @@ public class TraySettingsDataSourceTests : IDisposable
                 ApplicationTheme: ApplicationThemePreference.System,
                 OverlayTheme: OverlayThemePreference.FollowApplication,
                 OverlayOpacity: OverlayOpacityPreference.Default,
-                OverlayPosition: OverlayPositionPreset.TopRight,
-                OverlayMonitorDeviceName: null,
+                PositionMemoryMode: OverlayPositionMemoryMode.SharedAcrossDisplays,
+                SharedPosition: new OverlayPositionState.Preset(OverlayPositionPreset.TopRight),
+                PerDisplayPositions: null,
+                OverlayTargetMonitorId: null,
                 DataSource: null!));
     }
 
@@ -385,7 +389,8 @@ public class TraySettingsDataSourceTests : IDisposable
 
         var settings = TraySettingsStore.CreateForTests(_settingsPath).Load();
 
-        Assert.Equal(OverlayPositionPreset.TopRight, settings.OverlayPosition);
+        var invalidPreset = Assert.IsType<OverlayPositionState.Preset>(settings.SharedPosition);
+        Assert.Equal(OverlayPositionPreset.TopRight, invalidPreset.Value);
         Assert.Equal(CodexDataSourceKind.Wsl, settings.DataSource.Kind);
         Assert.Equal("Ubuntu", settings.DataSource.WslDistributionName);
     }
@@ -401,7 +406,7 @@ public class TraySettingsDataSourceTests : IDisposable
 
         var settings = TraySettingsStore.CreateForTests(_settingsPath).Load();
 
-        Assert.Null(settings.OverlayPosition);
+        Assert.Null(settings.SharedPosition);
         Assert.Equal(400.0, settings.OverlayLeft);
         Assert.Equal(500.0, settings.OverlayTop);
         Assert.Equal(CodexDataSourceKind.Wsl, settings.DataSource.Kind);
@@ -418,7 +423,8 @@ public class TraySettingsDataSourceTests : IDisposable
 
         var settings = TraySettingsStore.CreateForTests(_settingsPath).Load();
 
-        Assert.Equal(OverlayPositionPreset.TopRight, settings.OverlayPosition);
+        var defaultPreset = Assert.IsType<OverlayPositionState.Preset>(settings.SharedPosition);
+        Assert.Equal(OverlayPositionPreset.TopRight, defaultPreset.Value);
         Assert.Equal(CodexDataSourceKind.Wsl, settings.DataSource.Kind);
         Assert.Equal("Debian", settings.DataSource.WslDistributionName);
     }
@@ -435,8 +441,9 @@ public class TraySettingsDataSourceTests : IDisposable
 
         var settings = TraySettingsStore.CreateForTests(_settingsPath).Load();
 
-        Assert.Equal(OverlayPositionPreset.BottomLeft, settings.OverlayPosition);
-        Assert.Equal("DISPLAY2", settings.OverlayMonitorDeviceName);
+        var preset = Assert.IsType<OverlayPositionState.Preset>(settings.SharedPosition);
+        Assert.Equal(OverlayPositionPreset.BottomLeft, preset.Value);
+        Assert.Equal("DISPLAY2", settings.OverlayTargetMonitorId);
         Assert.Equal(CodexDataSourceKind.Wsl, settings.DataSource.Kind);
         Assert.Equal("Ubuntu", settings.DataSource.WslDistributionName);
     }
@@ -454,7 +461,7 @@ public class TraySettingsDataSourceTests : IDisposable
 
         var settings = TraySettingsStore.CreateForTests(_settingsPath).Load();
 
-        Assert.Null(settings.OverlayPosition);
+        Assert.Null(settings.SharedPosition);
         Assert.Equal(100.0, settings.OverlayLeft);
         Assert.Equal(200.0, settings.OverlayTop);
         Assert.Equal(CodexDataSourceKind.Wsl, settings.DataSource.Kind);
@@ -473,7 +480,8 @@ public class TraySettingsDataSourceTests : IDisposable
 
         var settings = TraySettingsStore.CreateForTests(_settingsPath).Load();
 
-        Assert.Equal(OverlayPositionPreset.TopRight, settings.OverlayPosition);
+        var fallbackPreset = Assert.IsType<OverlayPositionState.Preset>(settings.SharedPosition);
+        Assert.Equal(OverlayPositionPreset.TopRight, fallbackPreset.Value);
         Assert.Equal(CodexDataSourceKind.Wsl, settings.DataSource.Kind);
         Assert.Equal("Ubuntu", settings.DataSource.WslDistributionName);
     }

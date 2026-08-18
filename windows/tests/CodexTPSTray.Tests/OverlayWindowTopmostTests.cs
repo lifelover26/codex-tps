@@ -221,7 +221,7 @@ public class OverlayWindowTopmostTests
 
             var settings = TraySettings.Default with
             {
-                OverlayPosition = OverlayPositionPreset.TopRight,
+                SharedPosition = new OverlayPositionState.Preset(OverlayPositionPreset.TopRight),
                 OverlayLeft = null,
                 OverlayTop = null
             };
@@ -245,7 +245,6 @@ public class OverlayWindowTopmostTests
 
             var settings = TraySettings.Default with
             {
-                OverlayPosition = null,
                 OverlayLeft = 150.0,
                 OverlayTop = 250.0
             };

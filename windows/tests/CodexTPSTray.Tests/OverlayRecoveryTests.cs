@@ -1000,10 +1000,8 @@ public class OverlayWindowReconcilePlacementTests
             var window = new OverlayWindow(provider, interop);
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = null,
-                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
-                OverlayXRatio = 0.5,
-                OverlayYRatio = 0.25
+                PositionMemoryMode = OverlayPositionMemoryMode.SharedAcrossDisplays,
+                SharedPosition = new OverlayPositionState.Custom(0.5, 0.25)
             });
 
             // Original: 0.5 * (1920-200) = 860, 0.25 * (1040-120) = 230
@@ -1051,11 +1049,9 @@ public class OverlayWindowReconcilePlacementTests
             var window = new OverlayWindow(provider, interop);
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = null,
-                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
-                OverlayXRatio = 0.5,
-                OverlayYRatio = 0.25,
-                OverlayCustomMonitorId = @"\\.\DISPLAY2"
+                PositionMemoryMode = OverlayPositionMemoryMode.SharedAcrossDisplays,
+                SharedPosition = new OverlayPositionState.Custom(0.5, 0.25),
+                OverlayTargetMonitorId = @"\\.\DISPLAY2"
             });
 
             // Verify it targets the secondary display.
@@ -1112,10 +1108,8 @@ public class OverlayWindowReconcilePlacementTests
 
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = null,
-                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
-                OverlayXRatio = 0.5,
-                OverlayYRatio = 0.25
+                PositionMemoryMode = OverlayPositionMemoryMode.SharedAcrossDisplays,
+                SharedPosition = new OverlayPositionState.Custom(0.5, 0.25)
             });
 
             // Call ReconcilePlacement (via ExecuteDpiRepositionCore) multiple times.
@@ -1165,10 +1159,8 @@ public class OverlayWindowReconcilePlacementTests
 
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = null,
-                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
-                OverlayXRatio = 0.5,
-                OverlayYRatio = 0.25
+                PositionMemoryMode = OverlayPositionMemoryMode.SharedAcrossDisplays,
+                SharedPosition = new OverlayPositionState.Custom(0.5, 0.25)
             });
 
             // Start a drag (sets _isDragging = true).

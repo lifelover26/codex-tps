@@ -145,7 +145,7 @@ public class LocalizationTests
     [Fact]
     public void PositionMenu_Chinese()
     {
-        Assert.Equal("快速定位", Localization.PositionMenu(Language.Chinese));
+        Assert.Equal("位置", Localization.PositionMenu(Language.Chinese));
     }
 
     [Fact]
@@ -360,48 +360,48 @@ public class LocalizationTests
     }
 
     [Fact]
-    public void CustomPositionMenu_English()
+    public void PositionMemoryMenu_English()
     {
-        Assert.Equal("Custom Position", Localization.CustomPositionMenu(Language.English));
+        Assert.Equal("Position Memory", Localization.PositionMemoryMenu(Language.English));
     }
 
     [Fact]
-    public void CustomPositionMenu_Chinese()
+    public void PositionMemoryMenu_Chinese()
     {
-        Assert.Equal("自定义位置", Localization.CustomPositionMenu(Language.Chinese));
+        Assert.Equal("位置记忆", Localization.PositionMemoryMenu(Language.Chinese));
     }
 
     [Fact]
-    public void GetCustomPositionModeDisplayName_KeepRelative_English()
+    public void GetPositionMemoryModeDisplayName_Shared_English()
     {
-        Assert.Equal("Keep Relative Position", Localization.GetCustomPositionModeDisplayName(OverlayCustomPositionMode.KeepRelative, Language.English));
+        Assert.Equal("Shared across displays", Localization.GetPositionMemoryModeDisplayName(OverlayPositionMemoryMode.SharedAcrossDisplays, Language.English));
     }
 
     [Fact]
-    public void GetCustomPositionModeDisplayName_KeepRelative_Chinese()
+    public void GetPositionMemoryModeDisplayName_Shared_Chinese()
     {
-        Assert.Equal("保持相对位置", Localization.GetCustomPositionModeDisplayName(OverlayCustomPositionMode.KeepRelative, Language.Chinese));
+        Assert.Equal("跨屏共用", Localization.GetPositionMemoryModeDisplayName(OverlayPositionMemoryMode.SharedAcrossDisplays, Language.Chinese));
     }
 
     [Fact]
-    public void GetCustomPositionModeDisplayName_RememberPerDisplay_English()
+    public void GetPositionMemoryModeDisplayName_RememberPerDisplay_English()
     {
-        Assert.Equal("Remember per display", Localization.GetCustomPositionModeDisplayName(OverlayCustomPositionMode.RememberPerDisplay, Language.English));
+        Assert.Equal("Remember per display", Localization.GetPositionMemoryModeDisplayName(OverlayPositionMemoryMode.RememberPerDisplay, Language.English));
     }
 
     [Fact]
-    public void GetCustomPositionModeDisplayName_RememberPerDisplay_Chinese()
+    public void GetPositionMemoryModeDisplayName_RememberPerDisplay_Chinese()
     {
-        Assert.Equal("按显示器记忆", Localization.GetCustomPositionModeDisplayName(OverlayCustomPositionMode.RememberPerDisplay, Language.Chinese));
+        Assert.Equal("按显示器记忆", Localization.GetPositionMemoryModeDisplayName(OverlayPositionMemoryMode.RememberPerDisplay, Language.Chinese));
     }
 
     [Fact]
-    public void CustomPositionModeLabels_AreConciseAndNonEmpty()
+    public void PositionMemoryModeLabels_AreConciseAndNonEmpty()
     {
-        foreach (OverlayCustomPositionMode mode in Enum.GetValues<OverlayCustomPositionMode>())
+        foreach (OverlayPositionMemoryMode mode in Enum.GetValues<OverlayPositionMemoryMode>())
         {
-            string en = Localization.GetCustomPositionModeDisplayName(mode, Language.English);
-            string cn = Localization.GetCustomPositionModeDisplayName(mode, Language.Chinese);
+            string en = Localization.GetPositionMemoryModeDisplayName(mode, Language.English);
+            string cn = Localization.GetPositionMemoryModeDisplayName(mode, Language.Chinese);
             Assert.False(string.IsNullOrWhiteSpace(en));
             Assert.False(string.IsNullOrWhiteSpace(cn));
             Assert.True(en.Length <= 32, $"English label too long: {en}");

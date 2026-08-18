@@ -148,7 +148,10 @@ public class OverlayWindowAppearanceTests
             window.MoveToPosition(500, 300);
             AssertAppearanceStable(window, appearance, winOpacity);
 
-            window.ResetPosition(TraySettings.Default with { OverlayPosition = OverlayPositionPreset.BottomRight });
+            window.ResetPosition(TraySettings.Default with
+            {
+                SharedPosition = new OverlayPositionState.Preset(OverlayPositionPreset.BottomRight)
+            });
             AssertAppearanceStable(window, appearance, winOpacity);
 
             window.UpdateContent(new[] { "A", "B", "C", "D", "E", "F" });

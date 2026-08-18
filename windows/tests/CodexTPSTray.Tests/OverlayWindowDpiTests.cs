@@ -191,8 +191,7 @@ public class OverlayWindowDpiTests
             var window = new OverlayWindow(provider, interop);
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = OverlayPositionPreset.TopRight,
-                OverlayMonitorDeviceName = null
+                SharedPosition = new OverlayPositionState.Preset(OverlayPositionPreset.TopRight),
             });
 
             interop.SetWindowPosCalls.Clear();
@@ -222,10 +221,8 @@ public class OverlayWindowDpiTests
             // Custom position with normalized ratios (no legacy absolute coords).
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = null,
-                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
-                OverlayXRatio = 0.5,
-                OverlayYRatio = 0.25
+                PositionMemoryMode = OverlayPositionMemoryMode.SharedAcrossDisplays,
+                SharedPosition = new OverlayPositionState.Custom(0.5, 0.25)
             });
 
             interop.SetWindowPosCalls.Clear();
@@ -259,10 +256,8 @@ public class OverlayWindowDpiTests
 
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = null,
-                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
-                OverlayXRatio = 0.5,
-                OverlayYRatio = 0.25
+                PositionMemoryMode = OverlayPositionMemoryMode.SharedAcrossDisplays,
+                SharedPosition = new OverlayPositionState.Custom(0.5, 0.25)
             });
 
             interop.SetWindowPosCalls.Clear();
@@ -301,7 +296,7 @@ public class OverlayWindowDpiTests
             // Legacy absolute coordinates, no ratios yet.
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = null,
+                SharedPosition = null,
                 OverlayLeft = 500.0,
                 OverlayTop = 300.0
             });
@@ -314,8 +309,9 @@ public class OverlayWindowDpiTests
             // Migration clears legacy coords and produces normalized ratios.
             Assert.Null(migrated!.OverlayLeft);
             Assert.Null(migrated.OverlayTop);
-            Assert.True(migrated.OverlayXRatio.HasValue);
-            Assert.True(migrated.OverlayYRatio.HasValue);
+            var migratedCustom = Assert.IsType<OverlayPositionState.Custom>(migrated.SharedPosition);
+            Assert.Equal(500.0 / 1720.0, migratedCustom.XRatio, 6);
+            Assert.Equal(300.0 / 920.0, migratedCustom.YRatio, 6);
 
             // Position is preserved through migration (same relative spot).
             var moveCall = FindMoveCall(interop.SetWindowPosCalls);
@@ -339,13 +335,13 @@ public class OverlayWindowDpiTests
             // Start with TopRight
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = OverlayPositionPreset.TopRight
+                SharedPosition = new OverlayPositionState.Preset(OverlayPositionPreset.TopRight)
             });
 
             // Switch to BottomLeft
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = OverlayPositionPreset.BottomLeft
+                SharedPosition = new OverlayPositionState.Preset(OverlayPositionPreset.BottomLeft)
             });
 
             interop.SetWindowPosCalls.Clear();
@@ -373,16 +369,14 @@ public class OverlayWindowDpiTests
             // Start with preset
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = OverlayPositionPreset.TopRight
+                SharedPosition = new OverlayPositionState.Preset(OverlayPositionPreset.TopRight)
             });
 
             // Simulate drag to custom position: settings change to custom with ratios.
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = null,
-                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
-                OverlayXRatio = 0.5,
-                OverlayYRatio = 0.25
+                PositionMemoryMode = OverlayPositionMemoryMode.SharedAcrossDisplays,
+                SharedPosition = new OverlayPositionState.Custom(0.5, 0.25)
             });
 
             bool dragFired = false;
@@ -417,10 +411,8 @@ public class OverlayWindowDpiTests
             // Custom position with normalized ratios (the source of truth).
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = null,
-                OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
-                OverlayXRatio = 0.5,
-                OverlayYRatio = 0.25
+                PositionMemoryMode = OverlayPositionMemoryMode.SharedAcrossDisplays,
+                SharedPosition = new OverlayPositionState.Custom(0.5, 0.25)
             });
 
             bool dragFired = false;
@@ -451,7 +443,7 @@ public class OverlayWindowDpiTests
             var window = new OverlayWindow(provider, interop);
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = OverlayPositionPreset.TopRight
+                SharedPosition = new OverlayPositionState.Preset(OverlayPositionPreset.TopRight)
             });
 
             interop.SetWindowPosCalls.Clear();
@@ -488,8 +480,8 @@ public class OverlayWindowDpiTests
             var window = new OverlayWindow(provider, interop);
             window.UpdateSettings(TraySettings.Default with
             {
-                OverlayPosition = OverlayPositionPreset.TopLeft,
-                OverlayMonitorDeviceName = @"\\.\DISPLAY2"
+                SharedPosition = new OverlayPositionState.Preset(OverlayPositionPreset.TopLeft),
+                OverlayTargetMonitorId = @"\\.\DISPLAY2"
             });
 
             interop.SetWindowPosCalls.Clear();

@@ -406,7 +406,7 @@ public static class Localization
 
     public static string PositionMenu(Language language)
     {
-        return language == Language.Chinese ? "快速定位" : "Position";
+        return language == Language.Chinese ? "位置" : "Position";
     }
 
     public static string GetPositionPresetDisplayName(OverlayPositionPreset preset, Language language)
@@ -423,18 +423,18 @@ public static class Localization
         };
     }
 
-    public static string CustomPositionMenu(Language language)
+    public static string PositionMemoryMenu(Language language)
     {
-        return language == Language.Chinese ? "自定义位置" : "Custom Position";
+        return language == Language.Chinese ? "位置记忆" : "Position Memory";
     }
 
-    public static string GetCustomPositionModeDisplayName(OverlayCustomPositionMode mode, Language language)
+    public static string GetPositionMemoryModeDisplayName(OverlayPositionMemoryMode mode, Language language)
     {
         return mode switch
         {
-            OverlayCustomPositionMode.KeepRelative => language == Language.Chinese ? "保持相对位置" : "Keep Relative Position",
-            OverlayCustomPositionMode.RememberPerDisplay => language == Language.Chinese ? "按显示器记忆" : "Remember per display",
-            _ => language == Language.Chinese ? "保持相对位置" : "Keep Relative Position"
+            OverlayPositionMemoryMode.SharedAcrossDisplays => language == Language.Chinese ? "跨屏共用" : "Shared across displays",
+            OverlayPositionMemoryMode.RememberPerDisplay => language == Language.Chinese ? "按显示器记忆" : "Remember per display",
+            _ => language == Language.Chinese ? "跨屏共用" : "Shared across displays"
         };
     }
 

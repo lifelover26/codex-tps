@@ -7,9 +7,7 @@ namespace CodexTPSTray;
 // it carries every field the legacy call sites pass and implicitly defaults
 // DataSource to Windows. A secondary constructor (at the bottom of the type)
 // accepts an explicit DataSource for callers — notably TraySettingsStore —
-// that need to materialize a persisted WSL selection. A third constructor
-// accepts all fields including the custom-position ratios, per-display map,
-// and target-monitor ID added for normalized overlay positioning.
+// that need to materialize a persisted WSL selection.
 //
 // DataSource is a non-nullable init-only property backed by a private field.
 // The field defaults to CodexDataSourceSelection.Windows, so every TraySettings
@@ -25,6 +23,28 @@ namespace CodexTPSTray;
 // `with { DataSource = CodexDataSourceSelection.ForWsl("Ubuntu") }` continues
 // to work, and a failed `with` leaves the source object untouched because
 // `with` operates on a copy.
+//
+// Overlay position model (single authority):
+// - PositionMemoryMode: SharedAcrossDisplays or RememberPerDisplay.
+// - SharedPosition: the single full OverlayPositionState used by every
+//   display in shared mode, and the inheritance source for first-seen
+//   displays and deferred v0.4.0 preset migration in per-display mode.
+// - PerDisplayPositions: MonitorId -> full OverlayPositionState per physical
+//   display (preset OR custom), used in per-display mode.
+// - OverlayTargetMonitorId: the display the overlay last occupied; restore
+//   targets it and falls back to the current monitor when it is absent
+//   (never overwriting the stored id, so a reconnected display is restored).
+//
+// OverlayLeft/OverlayTop are NOT authoritative position state: they are a
+// pre-v0.4.0 migration payload only. TraySettingsStore keeps them when an
+// old file has no other position data, and OverlayPositionCoordinator
+// converts them into a SharedPosition Custom state at first restore, then
+// clears them forever. All v0.4.0 position fields (OverlayPosition,
+// OverlayMonitorDeviceName, OverlayCustomPositionMode, OverlayXRatio,
+// OverlayYRatio, OverlayPerDisplayPositions, OverlayCustomMonitorId) exist
+// only as on-disk keys read by TraySettingsStore's one-time migration; they
+// are gone from the in-memory model so they can never compete with the new
+// fields as a second authority.
 public record TraySettings(
     MetricWindow SelectedWindow,
     RefreshCadence RefreshCadence,
@@ -36,8 +56,11 @@ public record TraySettings(
     ApplicationThemePreference ApplicationTheme = ApplicationThemePreference.System,
     OverlayThemePreference OverlayTheme = OverlayThemePreference.FollowApplication,
     OverlayOpacityPreference OverlayOpacity = OverlayOpacityPreference.Default,
-    OverlayPositionPreset? OverlayPosition = OverlayPositionPreset.TopRight,
-    string? OverlayMonitorDeviceName = null
+    OverlayPositionMemoryMode PositionMemoryMode = OverlayPositionMemoryMode.SharedAcrossDisplays,
+    OverlayPositionState? SharedPosition = null,
+    IReadOnlyDictionary<string, OverlayPositionState>? PerDisplayPositions = null,
+    string? OverlayTargetMonitorId = null,
+    string? PendingPresetMigrationTarget = null
 )
 {
     // Backing field for DataSource. The initializer guarantees a valid Windows
@@ -57,21 +80,11 @@ public record TraySettings(
             value ?? throw new ArgumentNullException(nameof(DataSource));
     }
 
-    // Custom-position properties (normalized coordinate model). These are
-    // init-only auto-properties with safe defaults so that legacy call sites
-    // that use the 12-parameter primary constructor automatically get the
-    // KeepRelative default with no ratios/per-display map/target monitor.
-    public OverlayCustomPositionMode OverlayCustomPositionMode { get; init; } = OverlayCustomPositionMode.KeepRelative;
-    public double? OverlayXRatio { get; init; } = null;
-    public double? OverlayYRatio { get; init; } = null;
-    public IReadOnlyDictionary<string, DisplayRelativePosition>? OverlayPerDisplayPositions { get; init; } = null;
-    public string? OverlayCustomMonitorId { get; init; } = null;
-
-    // Compatibility constructor: 12 original parameters + explicit DataSource.
-    // Used by TraySettingsDataSourceTests.FullConstructor_* and any other legacy
-    // call site that names the DataSource parameter. Custom-position fields
-    // receive their property defaults (KeepRelative, null ratios, null map,
-    // null target monitor).
+    // Full constructor: every positional field plus an explicit DataSource.
+    // Used by TraySettingsStore when materializing persisted settings and by
+    // tests that need a WSL selection. Forwards to the primary constructor
+    // then sets DataSource through its init accessor so the null-rejection
+    // logic lives in exactly one place.
     public TraySettings(
         MetricWindow SelectedWindow,
         RefreshCadence RefreshCadence,
@@ -83,8 +96,10 @@ public record TraySettings(
         ApplicationThemePreference ApplicationTheme,
         OverlayThemePreference OverlayTheme,
         OverlayOpacityPreference OverlayOpacity,
-        OverlayPositionPreset? OverlayPosition,
-        string? OverlayMonitorDeviceName,
+        OverlayPositionMemoryMode PositionMemoryMode,
+        OverlayPositionState? SharedPosition,
+        IReadOnlyDictionary<string, OverlayPositionState>? PerDisplayPositions,
+        string? OverlayTargetMonitorId,
         CodexDataSourceSelection DataSource)
         : this(
             SelectedWindow,
@@ -97,57 +112,11 @@ public record TraySettings(
             ApplicationTheme,
             OverlayTheme,
             OverlayOpacity,
-            OverlayPosition,
-            OverlayMonitorDeviceName)
+            PositionMemoryMode,
+            SharedPosition,
+            PerDisplayPositions,
+            OverlayTargetMonitorId)
     {
-        this.DataSource = DataSource;
-    }
-
-    // Full constructor: accepts every field including the five custom-position
-    // properties and an explicit DataSource. Used by TraySettingsStore when
-    // materializing persisted settings and by OverlayCustomPositionCoordinator
-    // when producing updated settings after migration or first-seen
-    // inheritance. Forwards to the 12-parameter primary constructor then sets
-    // the remaining properties through their init accessors so that the
-    // DataSource null-rejection logic lives in exactly one place.
-    public TraySettings(
-        MetricWindow SelectedWindow,
-        RefreshCadence RefreshCadence,
-        Language Language,
-        bool OverlayEnabled,
-        bool OverlayLocked,
-        double? OverlayLeft,
-        double? OverlayTop,
-        ApplicationThemePreference ApplicationTheme,
-        OverlayThemePreference OverlayTheme,
-        OverlayOpacityPreference OverlayOpacity,
-        OverlayPositionPreset? OverlayPosition,
-        string? OverlayMonitorDeviceName,
-        OverlayCustomPositionMode OverlayCustomPositionMode,
-        double? OverlayXRatio,
-        double? OverlayYRatio,
-        IReadOnlyDictionary<string, DisplayRelativePosition>? OverlayPerDisplayPositions,
-        string? OverlayCustomMonitorId,
-        CodexDataSourceSelection DataSource)
-        : this(
-            SelectedWindow,
-            RefreshCadence,
-            Language,
-            OverlayEnabled,
-            OverlayLocked,
-            OverlayLeft,
-            OverlayTop,
-            ApplicationTheme,
-            OverlayTheme,
-            OverlayOpacity,
-            OverlayPosition,
-            OverlayMonitorDeviceName)
-    {
-        this.OverlayCustomPositionMode = OverlayCustomPositionMode;
-        this.OverlayXRatio = OverlayXRatio;
-        this.OverlayYRatio = OverlayYRatio;
-        this.OverlayPerDisplayPositions = OverlayPerDisplayPositions;
-        this.OverlayCustomMonitorId = OverlayCustomMonitorId;
         this.DataSource = DataSource;
     }
 
@@ -162,14 +131,9 @@ public record TraySettings(
         ApplicationTheme: ApplicationThemePreference.System,
         OverlayTheme: OverlayThemePreference.FollowApplication,
         OverlayOpacity: OverlayOpacityPreference.Default,
-        OverlayPosition: OverlayPositionPreset.TopRight,
-        OverlayMonitorDeviceName: null
-    )
-    {
-        OverlayCustomPositionMode = OverlayCustomPositionMode.KeepRelative,
-        OverlayXRatio = null,
-        OverlayYRatio = null,
-        OverlayPerDisplayPositions = null,
-        OverlayCustomMonitorId = null
-    };
+        PositionMemoryMode: OverlayPositionMemoryMode.SharedAcrossDisplays,
+        SharedPosition: new OverlayPositionState.Preset(OverlayPositionPreset.TopRight),
+        PerDisplayPositions: null,
+        OverlayTargetMonitorId: null
+    );
 }

@@ -167,7 +167,7 @@ public class TrayIconManagerMenuStructureTests
     }
 
     [Fact]
-    public Task Menu_OverlaySubmenu_HasCustomPositionSubmenu()
+    public Task Menu_OverlaySubmenu_HasPositionMemorySubmenu()
     {
         return WpfTestHelpers.RunInStaWithWpfAsync(async () =>
         {
@@ -192,14 +192,14 @@ public class TrayIconManagerMenuStructureTests
                 .Select(i => i is ToolStripMenuItem mi ? mi.Text : "-")
                 .ToList();
 
-            Assert.Contains("Custom Position", allItemTexts);
-            Assert.Contains("Keep Relative Position", allItemTexts);
+            Assert.Contains("Position Memory", allItemTexts);
+            Assert.Contains("Shared across displays", allItemTexts);
             Assert.Contains("Remember per display", allItemTexts);
         });
     }
 
     [Fact]
-    public Task Menu_OverlaySubmenu_CustomPositionSubmenu_Chinese()
+    public Task Menu_OverlaySubmenu_PositionMemorySubmenu_Chinese()
     {
         return WpfTestHelpers.RunInStaWithWpfAsync(async () =>
         {
@@ -224,14 +224,14 @@ public class TrayIconManagerMenuStructureTests
                 .Select(i => i is ToolStripMenuItem mi ? mi.Text : "-")
                 .ToList();
 
-            Assert.Contains("自定义位置", allItemTexts);
-            Assert.Contains("保持相对位置", allItemTexts);
+            Assert.Contains("位置记忆", allItemTexts);
+            Assert.Contains("跨屏共用", allItemTexts);
             Assert.Contains("按显示器记忆", allItemTexts);
         });
     }
 
     [Fact]
-    public Task Menu_OverlaySubmenu_CustomPosition_KeepRelativeCheckedByDefault()
+    public Task Menu_OverlaySubmenu_PositionMemory_SharedCheckedByDefault()
     {
         return WpfTestHelpers.RunInStaWithWpfAsync(async () =>
         {
@@ -256,10 +256,10 @@ public class TrayIconManagerMenuStructureTests
                 .OfType<ToolStripMenuItem>()
                 .ToList();
 
-            var keepRelative = allItems.First(i => i.Text == "Keep Relative Position");
+            var sharedAcrossDisplays = allItems.First(i => i.Text == "Shared across displays");
             var rememberPerDisplay = allItems.First(i => i.Text == "Remember per display");
 
-            Assert.True(keepRelative.Checked);
+            Assert.True(sharedAcrossDisplays.Checked);
             Assert.False(rememberPerDisplay.Checked);
         });
     }

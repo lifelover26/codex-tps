@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CodexTPSCore;
 
 namespace CodexTPSTray;
@@ -8,10 +10,15 @@ namespace CodexTPSTray;
 public class TraySettingsStore : ITraySettingsStore
 {
     private readonly string _settingsPath;
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
-        WriteIndented = true
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    private static readonly JsonSerializerOptions DataSourceSerializerOptions = new();
 
     private TraySettingsStore(string settingsPath)
     {
@@ -45,149 +52,18 @@ public class TraySettingsStore : ITraySettingsStore
         try
         {
             string json = File.ReadAllText(_settingsPath);
-            var raw = JsonSerializer.Deserialize<RawSettingsDto>(json);
-
-            MetricWindow window = ParseMetricWindow(raw?.SelectedWindow);
-            RefreshCadence cadence = ParseRefreshCadence(raw?.RefreshCadence);
-            Language language = ParseLanguage(raw?.Language);
-            bool overlayEnabled = ParseOverlayEnabled(raw?.OverlayEnabled);
-            bool overlayLocked = ParseOverlayLocked(raw?.OverlayLocked);
-            double? overlayLeft = ParseOverlayPosition(raw?.OverlayLeft);
-            double? overlayTop = ParseOverlayPosition(raw?.OverlayTop);
-            ApplicationThemePreference appTheme = ParseApplicationTheme(raw?.ApplicationTheme);
-            OverlayThemePreference overlayTheme = ParseOverlayTheme(raw?.OverlayTheme);
-            OverlayOpacityPreference overlayOpacity = ParseOverlayOpacity(raw?.OverlayOpacity);
-            OverlayPositionPreset? overlayPosition = ParseOverlayPositionPreset(raw?.OverlayPosition);
-            string? overlayMonitorDeviceName = raw?.OverlayMonitorDeviceName;
-            OverlayCustomPositionMode overlayCustomMode = ParseOverlayCustomPositionMode(raw?.OverlayCustomPositionMode);
-            double? overlayXRatio = ParseOverlayRatio(raw?.OverlayXRatio);
-            double? overlayYRatio = ParseOverlayRatio(raw?.OverlayYRatio);
-            IReadOnlyDictionary<string, DisplayRelativePosition>? overlayPerDisplay =
-                ParseOverlayPerDisplayPositions(raw?.OverlayPerDisplayPositions);
-            string? overlayCustomMonitorId = raw?.OverlayCustomMonitorId;
-
-            // Parse DataSource independently of the other fields. Any invalid
-            // combination (unknown Kind, malformed name, Windows carrying a
-            // name, WSL missing a name) falls back to Windows WITHOUT touching
-            // the rest of the settings, satisfying the per-field fallback
-            // contract. Parsed here once so every return branch below threads
-            // the same value through the full constructor and cannot drop it.
-            CodexDataSourceSelection dataSource = ParseDataSource(raw?.DataSource);
-
-            bool positionKeyPresent = raw?.OverlayPosition != null;
-            bool invalidPositionInJson = positionKeyPresent && !overlayPosition.HasValue;
-            bool hasLegacyCoords = overlayLeft.HasValue && overlayTop.HasValue;
-            bool hasRatios = overlayXRatio.HasValue && overlayYRatio.HasValue;
-            bool hasPerDisplay = overlayPerDisplay != null && overlayPerDisplay.Count > 0;
-            bool hasCustomData = hasLegacyCoords || hasRatios || hasPerDisplay;
-
-            // Invalid preset string: always fall back to TopRight, regardless of
-            // residual coords. Custom position memory (ratios, per-display records,
-            // custom monitor id) is preserved so a later drag-into-custom resumes
-            // the user's saved state.
-            if (invalidPositionInJson)
+            RawSettingsDto? raw = JsonSerializer.Deserialize<RawSettingsDto>(json, SerializerOptions);
+            if (raw == null)
             {
-                return new TraySettings(
-                    SelectedWindow: window,
-                    RefreshCadence: cadence,
-                    Language: language,
-                    OverlayEnabled: overlayEnabled,
-                    OverlayLocked: overlayLocked,
-                    OverlayLeft: null,
-                    OverlayTop: null,
-                    ApplicationTheme: appTheme,
-                    OverlayTheme: overlayTheme,
-                    OverlayOpacity: overlayOpacity,
-                    OverlayPosition: OverlayPositionPreset.TopRight,
-                    OverlayMonitorDeviceName: null,
-                    OverlayCustomPositionMode: overlayCustomMode,
-                    OverlayXRatio: overlayXRatio,
-                    OverlayYRatio: overlayYRatio,
-                    OverlayPerDisplayPositions: overlayPerDisplay,
-                    OverlayCustomMonitorId: overlayCustomMonitorId,
-                    DataSource: dataSource
-                );
+                return TraySettings.Default;
             }
 
-            // Valid preset: clear legacy absolute coords but preserve custom
-            // position memory (normalized ratios, per-display records, custom
-            // monitor id). Selecting a preset only changes the current positioning
-            // method and the preset's target monitor; it must not delete the
-            // user's saved custom state. A later drag exits preset mode and
-            // resumes the preserved custom mode and records.
-            if (overlayPosition.HasValue)
-            {
-                return new TraySettings(
-                    SelectedWindow: window,
-                    RefreshCadence: cadence,
-                    Language: language,
-                    OverlayEnabled: overlayEnabled,
-                    OverlayLocked: overlayLocked,
-                    OverlayLeft: null,
-                    OverlayTop: null,
-                    ApplicationTheme: appTheme,
-                    OverlayTheme: overlayTheme,
-                    OverlayOpacity: overlayOpacity,
-                    OverlayPosition: overlayPosition,
-                    OverlayMonitorDeviceName: overlayMonitorDeviceName,
-                    OverlayCustomPositionMode: overlayCustomMode,
-                    OverlayXRatio: overlayXRatio,
-                    OverlayYRatio: overlayYRatio,
-                    OverlayPerDisplayPositions: overlayPerDisplay,
-                    OverlayCustomMonitorId: overlayCustomMonitorId,
-                    DataSource: dataSource
-                );
-            }
+            CodexDataSourceSelection dataSource = ParseDataSource(raw.DataSource);
+            PositionMigration position = HasNewPositionFields(raw)
+                ? ParseNewPosition(raw)
+                : ParseLegacyPosition(raw);
 
-            // No preset. If any custom data exists (legacy coords, normalized
-            // ratios, or per-display records), enter custom mode and carry the
-            // data forward. Legacy coords are preserved verbatim so the
-            // coordinator can migrate them at first restore using the live
-            // monitor info and window size, which the store does not have.
-            if (hasCustomData)
-            {
-                return new TraySettings(
-                    SelectedWindow: window,
-                    RefreshCadence: cadence,
-                    Language: language,
-                    OverlayEnabled: overlayEnabled,
-                    OverlayLocked: overlayLocked,
-                    OverlayLeft: overlayLeft,
-                    OverlayTop: overlayTop,
-                    ApplicationTheme: appTheme,
-                    OverlayTheme: overlayTheme,
-                    OverlayOpacity: overlayOpacity,
-                    OverlayPosition: null,
-                    OverlayMonitorDeviceName: null,
-                    OverlayCustomPositionMode: overlayCustomMode,
-                    OverlayXRatio: overlayXRatio,
-                    OverlayYRatio: overlayYRatio,
-                    OverlayPerDisplayPositions: overlayPerDisplay,
-                    OverlayCustomMonitorId: overlayCustomMonitorId,
-                    DataSource: dataSource
-                );
-            }
-
-            return new TraySettings(
-                SelectedWindow: window,
-                RefreshCadence: cadence,
-                Language: language,
-                OverlayEnabled: overlayEnabled,
-                OverlayLocked: overlayLocked,
-                OverlayLeft: null,
-                OverlayTop: null,
-                ApplicationTheme: appTheme,
-                OverlayTheme: overlayTheme,
-                OverlayOpacity: overlayOpacity,
-                OverlayPosition: OverlayPositionPreset.TopRight,
-                OverlayMonitorDeviceName: null,
-                OverlayCustomPositionMode: overlayCustomMode,
-                OverlayXRatio: overlayXRatio,
-                OverlayYRatio: overlayYRatio,
-                OverlayPerDisplayPositions: overlayPerDisplay,
-                OverlayCustomMonitorId: overlayCustomMonitorId,
-                DataSource: dataSource
-            );
+            return CreateSettings(raw, position, dataSource);
         }
         catch
         {
@@ -210,14 +86,21 @@ public class TraySettingsStore : ITraySettingsStore
             }
         }
 
-        string tempPath = Path.Combine(directory, $"{Guid.NewGuid()}.tmp");
-        bool success = false;
+        string tempPath = Path.Combine(
+            directory,
+            Guid.NewGuid().ToString("N") + ".tmp");
 
         try
         {
-            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(new RawSettingsDto(settings), SerializerOptions);
+            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(
+                new RawSettingsDto(settings),
+                SerializerOptions);
 
-            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var stream = new FileStream(
+                tempPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None))
             {
                 stream.Write(bytes, 0, bytes.Length);
                 stream.Flush(true);
@@ -232,11 +115,11 @@ public class TraySettingsStore : ITraySettingsStore
                 File.Move(tempPath, _settingsPath);
             }
 
-            success = true;
+            return true;
         }
         catch
         {
-            success = false;
+            return false;
         }
         finally
         {
@@ -251,8 +134,6 @@ public class TraySettingsStore : ITraySettingsStore
                 }
             }
         }
-
-        return success;
     }
 
     private sealed class InMemoryTraySettingsStore : ITraySettingsStore
@@ -273,6 +154,349 @@ public class TraySettingsStore : ITraySettingsStore
         }
     }
 
+    private sealed record PositionMigration(
+        OverlayPositionMemoryMode PositionMemoryMode,
+        OverlayPositionState? SharedPosition,
+        IReadOnlyDictionary<string, OverlayPositionState>? PerDisplayPositions,
+        string? OverlayTargetMonitorId,
+        string? PendingPresetMigrationTarget,
+        double? LegacyLeft,
+        double? LegacyTop);
+
+    private static TraySettings CreateSettings(
+        RawSettingsDto raw,
+        PositionMigration position,
+        CodexDataSourceSelection dataSource)
+    {
+        bool hasLegacyCoordinates = position.LegacyLeft.HasValue && position.LegacyTop.HasValue;
+        OverlayPositionState? sharedPosition = position.SharedPosition;
+        if (sharedPosition == null && !hasLegacyCoordinates)
+        {
+            sharedPosition = new OverlayPositionState.Preset(OverlayPositionPreset.TopRight);
+        }
+
+        double? legacyLeft = sharedPosition == null
+            ? position.LegacyLeft
+            : null;
+        double? legacyTop = sharedPosition == null
+            ? position.LegacyTop
+            : null;
+        string? pendingPresetTarget = sharedPosition is OverlayPositionState.Preset
+            ? position.PendingPresetMigrationTarget
+            : null;
+
+        return new TraySettings(
+            SelectedWindow: ParseMetricWindow(raw.SelectedWindow),
+            RefreshCadence: ParseRefreshCadence(raw.RefreshCadence),
+            Language: ParseLanguage(raw.Language),
+            OverlayEnabled: raw.OverlayEnabled ?? TraySettings.Default.OverlayEnabled,
+            OverlayLocked: raw.OverlayLocked ?? TraySettings.Default.OverlayLocked,
+            OverlayLeft: legacyLeft,
+            OverlayTop: legacyTop,
+            ApplicationTheme: ParseApplicationTheme(raw.ApplicationTheme),
+            OverlayTheme: ParseOverlayTheme(raw.OverlayTheme),
+            OverlayOpacity: ParseOverlayOpacity(raw.OverlayOpacity),
+            PositionMemoryMode: position.PositionMemoryMode,
+            SharedPosition: sharedPosition,
+            PerDisplayPositions: position.PerDisplayPositions,
+            OverlayTargetMonitorId: position.OverlayTargetMonitorId,
+            PendingPresetMigrationTarget: pendingPresetTarget)
+        {
+            DataSource = dataSource
+        };
+    }
+
+    private static bool HasNewPositionFields(RawSettingsDto raw)
+    {
+        return HasJsonValue(raw.PositionMemoryMode)
+            || HasJsonValue(raw.SharedPosition)
+            || HasJsonValue(raw.PerDisplayPositions)
+            || HasJsonValue(raw.OverlayTargetMonitorId)
+            || HasJsonValue(raw.PendingPresetMigrationTarget);
+    }
+
+    private static PositionMigration ParseNewPosition(RawSettingsDto raw)
+    {
+        OverlayPositionState? shared = ParsePositionState(raw.SharedPosition);
+        IReadOnlyDictionary<string, OverlayPositionState>? perDisplay =
+            ParsePositionStates(raw.PerDisplayPositions);
+
+        double? legacyLeft = ParseFiniteDouble(raw.OverlayLeft);
+        double? legacyTop = ParseFiniteDouble(raw.OverlayTop);
+        if (shared != null)
+        {
+            legacyLeft = null;
+            legacyTop = null;
+        }
+
+        return new PositionMigration(
+            PositionMemoryMode: ParsePositionMemoryMode(raw.PositionMemoryMode),
+            SharedPosition: shared,
+            PerDisplayPositions: perDisplay,
+            OverlayTargetMonitorId: ParseText(raw.OverlayTargetMonitorId),
+            PendingPresetMigrationTarget: ParseText(raw.PendingPresetMigrationTarget),
+            LegacyLeft: legacyLeft.HasValue && legacyTop.HasValue ? legacyLeft : null,
+            LegacyTop: legacyLeft.HasValue && legacyTop.HasValue ? legacyTop : null);
+    }
+
+    private static PositionMigration ParseLegacyPosition(RawSettingsDto raw)
+    {
+        OverlayPositionPreset? preset = ParsePositionPreset(raw.OverlayPosition);
+        bool hasPresetKey = HasJsonValue(raw.OverlayPosition);
+        OverlayPositionMemoryMode mode = ParseLegacyMemoryMode(raw.OverlayCustomPositionMode);
+        IReadOnlyDictionary<string, OverlayPositionState>? perDisplay =
+            ParseLegacyPerDisplayPositions(raw.OverlayPerDisplayPositions);
+
+        double? xRatio = ParseFiniteRatio(raw.OverlayXRatio);
+        double? yRatio = ParseFiniteRatio(raw.OverlayYRatio);
+        OverlayPositionState? shared = null;
+        if (preset.HasValue)
+        {
+            shared = new OverlayPositionState.Preset(preset.Value);
+        }
+        else if (xRatio.HasValue && yRatio.HasValue)
+        {
+            shared = new OverlayPositionState.Custom(xRatio.Value, yRatio.Value);
+        }
+
+        double? left = ParseFiniteDouble(raw.OverlayLeft);
+        double? top = ParseFiniteDouble(raw.OverlayTop);
+        if (shared != null || hasPresetKey || xRatio.HasValue || yRatio.HasValue)
+        {
+            left = null;
+            top = null;
+        }
+
+        string? target = ParseText(raw.OverlayCustomMonitorId)
+            ?? ParseText(raw.OverlayMonitorDeviceName);
+        string? pendingPresetTarget = mode == OverlayPositionMemoryMode.RememberPerDisplay
+            && preset.HasValue
+            ? target
+            : null;
+
+        return new PositionMigration(
+            PositionMemoryMode: mode,
+            SharedPosition: shared,
+            PerDisplayPositions: perDisplay,
+            OverlayTargetMonitorId: target,
+            PendingPresetMigrationTarget: pendingPresetTarget,
+            LegacyLeft: left.HasValue && top.HasValue ? left : null,
+            LegacyTop: left.HasValue && top.HasValue ? top : null);
+    }
+
+    private static OverlayPositionMemoryMode ParsePositionMemoryMode(JsonElement? element)
+    {
+        string? value = ParseText(element);
+        if (value != null
+            && Enum.TryParse<OverlayPositionMemoryMode>(value, true, out var mode)
+            && Enum.IsDefined(mode))
+        {
+            return mode;
+        }
+
+        return OverlayPositionMemoryMode.SharedAcrossDisplays;
+    }
+
+    private static OverlayPositionMemoryMode ParseLegacyMemoryMode(JsonElement? element)
+    {
+        string? value = ParseText(element);
+        if (string.Equals(
+                value,
+                nameof(OverlayCustomPositionMode.RememberPerDisplay),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return OverlayPositionMemoryMode.RememberPerDisplay;
+        }
+
+        return OverlayPositionMemoryMode.SharedAcrossDisplays;
+    }
+
+    private static OverlayPositionState? ParsePositionState(JsonElement? element)
+    {
+        if (!TryGetObject(element, out var state))
+        {
+            return null;
+        }
+
+        string? kind = GetStringProperty(state, "Kind");
+        if (string.Equals(kind, "Preset", StringComparison.OrdinalIgnoreCase))
+        {
+            OverlayPositionPreset? preset = ParsePositionPreset(GetProperty(state, "Preset"));
+            return preset.HasValue ? new OverlayPositionState.Preset(preset.Value) : null;
+        }
+
+        if (string.Equals(kind, "Custom", StringComparison.OrdinalIgnoreCase))
+        {
+            double? xRatio = ParseFiniteRatio(GetProperty(state, "XRatio"));
+            double? yRatio = ParseFiniteRatio(GetProperty(state, "YRatio"));
+            return xRatio.HasValue && yRatio.HasValue
+                ? new OverlayPositionState.Custom(xRatio.Value, yRatio.Value)
+                : null;
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyDictionary<string, OverlayPositionState>? ParsePositionStates(
+        JsonElement? element)
+    {
+        if (!TryGetObject(element, out var positions))
+        {
+            return null;
+        }
+
+        var result = new Dictionary<string, OverlayPositionState>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (JsonProperty property in positions.EnumerateObject())
+        {
+            if (string.IsNullOrWhiteSpace(property.Name))
+            {
+                continue;
+            }
+
+            OverlayPositionState? state = ParsePositionState(property.Value);
+            if (state != null)
+            {
+                result[property.Name] = state;
+            }
+        }
+
+        return result.Count == 0 ? null : result;
+    }
+
+    private static IReadOnlyDictionary<string, OverlayPositionState>? ParseLegacyPerDisplayPositions(
+        JsonElement? element)
+    {
+        if (!TryGetObject(element, out var positions))
+        {
+            return null;
+        }
+
+        var result = new Dictionary<string, OverlayPositionState>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (JsonProperty property in positions.EnumerateObject())
+        {
+            if (string.IsNullOrWhiteSpace(property.Name)
+                || !TryGetObject(property.Value, out var legacy))
+            {
+                continue;
+            }
+
+            double? xRatio = ParseFiniteRatio(GetProperty(legacy, "XRatio"));
+            double? yRatio = ParseFiniteRatio(GetProperty(legacy, "YRatio"));
+            if (xRatio.HasValue && yRatio.HasValue)
+            {
+                result[property.Name] = new OverlayPositionState.Custom(
+                    xRatio.Value,
+                    yRatio.Value);
+            }
+        }
+
+        return result.Count == 0 ? null : result;
+    }
+
+    private static OverlayPositionPreset? ParsePositionPreset(JsonElement? element)
+    {
+        string? value = ParseText(element);
+        if (value != null
+            && Enum.TryParse<OverlayPositionPreset>(value, true, out var preset)
+            && Enum.IsDefined(preset))
+        {
+            return preset;
+        }
+
+        return null;
+    }
+
+    private static double? ParseFiniteRatio(JsonElement? element)
+    {
+        double? value = ParseFiniteDouble(element);
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        return value.Value < 0.0
+            ? 0.0
+            : value.Value > 1.0
+                ? 1.0
+                : value.Value;
+    }
+
+    private static double? ParseFiniteDouble(JsonElement? element)
+    {
+        if (!element.HasValue || element.Value.ValueKind != JsonValueKind.Number)
+        {
+            return null;
+        }
+
+        if (!element.Value.TryGetDouble(out double value)
+            || double.IsNaN(value)
+            || double.IsInfinity(value))
+        {
+            return null;
+        }
+
+        return value;
+    }
+
+    private static string? ParseText(JsonElement? element)
+    {
+        if (!element.HasValue || element.Value.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        return ParseText(element.Value.GetString());
+    }
+
+    private static string? ParseText(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static bool HasText(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool HasJsonValue(JsonElement? element)
+    {
+        return element.HasValue && element.Value.ValueKind != JsonValueKind.Null;
+    }
+
+    private static bool TryGetObject(JsonElement? element, out JsonElement value)
+    {
+        value = default;
+        if (!element.HasValue || element.Value.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        value = element.Value;
+        return true;
+    }
+
+    private static JsonElement? GetProperty(JsonElement element, string name)
+    {
+        foreach (JsonProperty property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return property.Value;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? GetStringProperty(JsonElement element, string name)
+    {
+        return ParseText(GetProperty(element, name));
+    }
+
     private static MetricWindow ParseMetricWindow(string? value)
     {
         if (value == null)
@@ -280,7 +504,7 @@ public class TraySettingsStore : ITraySettingsStore
             return TraySettings.Default.SelectedWindow;
         }
 
-        if (Enum.TryParse<MetricWindow>(value, ignoreCase: true, out var window) && Enum.IsDefined(window))
+        if (Enum.TryParse<MetricWindow>(value, true, out var window) && Enum.IsDefined(window))
         {
             return window;
         }
@@ -290,22 +514,16 @@ public class TraySettingsStore : ITraySettingsStore
 
     private static RefreshCadence ParseRefreshCadence(int? value)
     {
-        if (value == null)
-        {
-            return TraySettings.Default.RefreshCadence;
-        }
-
-        return RefreshCadenceExtensions.FromSeconds(value.Value);
+        return value.HasValue
+            ? RefreshCadenceExtensions.FromSeconds(value.Value)
+            : TraySettings.Default.RefreshCadence;
     }
 
     private static Language ParseLanguage(string? value)
     {
-        if (value == null)
-        {
-            return TraySettings.Default.Language;
-        }
-
-        if (Enum.TryParse<Language>(value, ignoreCase: true, out var language) && Enum.IsDefined(language))
+        if (value != null
+            && Enum.TryParse<Language>(value, true, out var language)
+            && Enum.IsDefined(language))
         {
             return language;
         }
@@ -313,40 +531,9 @@ public class TraySettingsStore : ITraySettingsStore
         return TraySettings.Default.Language;
     }
 
-    private static bool ParseOverlayEnabled(bool? value)
-    {
-        return value ?? TraySettings.Default.OverlayEnabled;
-    }
-
-    private static bool ParseOverlayLocked(bool? value)
-    {
-        return value ?? TraySettings.Default.OverlayLocked;
-    }
-
-    private static double? ParseOverlayPosition(double? value)
-    {
-        if (value == null)
-        {
-            return null;
-        }
-
-        double pos = value.Value;
-        if (double.IsNaN(pos) || double.IsInfinity(pos))
-        {
-            return null;
-        }
-
-        return pos;
-    }
-
     private static ApplicationThemePreference ParseApplicationTheme(string? value)
     {
-        if (value == null)
-        {
-            return TraySettings.Default.ApplicationTheme;
-        }
-
-        return value.ToLowerInvariant() switch
+        return value?.ToLowerInvariant() switch
         {
             "system" => ApplicationThemePreference.System,
             "light" => ApplicationThemePreference.Light,
@@ -357,12 +544,7 @@ public class TraySettingsStore : ITraySettingsStore
 
     private static OverlayThemePreference ParseOverlayTheme(string? value)
     {
-        if (value == null)
-        {
-            return TraySettings.Default.OverlayTheme;
-        }
-
-        return value.ToLowerInvariant() switch
+        return value?.ToLowerInvariant() switch
         {
             "followapplication" => OverlayThemePreference.FollowApplication,
             "system" => OverlayThemePreference.System,
@@ -374,12 +556,9 @@ public class TraySettingsStore : ITraySettingsStore
 
     private static OverlayOpacityPreference ParseOverlayOpacity(string? value)
     {
-        if (value == null)
-        {
-            return TraySettings.Default.OverlayOpacity;
-        }
-
-        if (Enum.TryParse<OverlayOpacityPreference>(value, ignoreCase: true, out var preference) && Enum.IsDefined(preference))
+        if (value != null
+            && Enum.TryParse<OverlayOpacityPreference>(value, true, out var preference)
+            && Enum.IsDefined(preference))
         {
             return preference;
         }
@@ -387,185 +566,26 @@ public class TraySettingsStore : ITraySettingsStore
         return TraySettings.Default.OverlayOpacity;
     }
 
-    private static OverlayPositionPreset? ParseOverlayPositionPreset(string? value)
-    {
-        if (value == null)
-        {
-            return null;
-        }
-
-        if (Enum.TryParse<OverlayPositionPreset>(value, ignoreCase: true, out var preset) && Enum.IsDefined(preset))
-        {
-            return preset;
-        }
-
-        return null;
-    }
-
-    private static OverlayCustomPositionMode ParseOverlayCustomPositionMode(string? value)
-    {
-        if (value == null)
-        {
-            return OverlayCustomPositionMode.KeepRelative;
-        }
-
-        if (Enum.TryParse<OverlayCustomPositionMode>(value, ignoreCase: true, out var mode) && Enum.IsDefined(mode))
-        {
-            return mode;
-        }
-
-        return OverlayCustomPositionMode.KeepRelative;
-    }
-
-    private static double? ParseOverlayRatio(double? value)
-    {
-        if (value == null)
-        {
-            return null;
-        }
-
-        double ratio = value.Value;
-        if (double.IsNaN(ratio) || double.IsInfinity(ratio))
-        {
-            return null;
-        }
-
-        if (ratio < 0.0)
-        {
-            return 0.0;
-        }
-
-        if (ratio > 1.0)
-        {
-            return 1.0;
-        }
-
-        return ratio;
-    }
-
-    private static IReadOnlyDictionary<string, DisplayRelativePosition>? ParseOverlayPerDisplayPositions(
-        Dictionary<string, DisplayRelativePositionDto>? raw)
-    {
-        if (raw == null || raw.Count == 0)
-        {
-            return null;
-        }
-
-        var result = new Dictionary<string, DisplayRelativePosition>(raw.Count, StringComparer.OrdinalIgnoreCase);
-        foreach (var kvp in raw)
-        {
-            if (string.IsNullOrWhiteSpace(kvp.Key))
-            {
-                continue;
-            }
-
-            double? x = ParseOverlayRatio(kvp.Value?.XRatio);
-            double? y = ParseOverlayRatio(kvp.Value?.YRatio);
-            if (!x.HasValue || !y.HasValue)
-            {
-                continue;
-            }
-
-            result[kvp.Key] = new DisplayRelativePosition(x.Value, y.Value);
-        }
-
-        return result.Count == 0 ? null : result;
-    }
-
-    private static Dictionary<string, DisplayRelativePositionDto>? BuildPerDisplayDto(
-        IReadOnlyDictionary<string, DisplayRelativePosition>? positions)
-    {
-        if (positions == null || positions.Count == 0)
-        {
-            return null;
-        }
-
-        var dto = new Dictionary<string, DisplayRelativePositionDto>(positions.Count);
-        foreach (var kvp in positions)
-        {
-            if (string.IsNullOrWhiteSpace(kvp.Key))
-            {
-                continue;
-            }
-
-            dto[kvp.Key] = new DisplayRelativePositionDto
-            {
-                XRatio = kvp.Value.XRatio,
-                YRatio = kvp.Value.YRatio
-            };
-        }
-
-        return dto.Count == 0 ? null : dto;
-    }
-
-    private sealed class DisplayRelativePositionDto
-    {
-        public double? XRatio { get; set; }
-        public double? YRatio { get; set; }
-    }
-
-    // Parses the persisted DataSource object into a CodexDataSourceSelection.
-    // Reads from a JsonElement? (not a typed DTO) so that a tampered or
-    // corrupted DataSource field — e.g. Kind supplied as a number, or the
-    // whole field set to a string — can never crash the surrounding
-    // RawSettingsDto deserialization. Every invalid shape degrades to Windows
-    // without touching the other settings that were already parsed.
-    //
-    // On-disk contract: { "Kind": "Windows"|"Wsl", "WslDistributionName": string|null }.
-    // Kind is matched case-insensitively. The distribution name is normalized
-    // and validated by CodexDataSourceSelection.ForWsl; an invalid name falls
-    // back to Windows. Windows must not carry a name; WSL must carry a valid
-    // one. Anything else is Windows.
     private static CodexDataSourceSelection ParseDataSource(JsonElement? element)
     {
-        if (!element.HasValue || element.Value.ValueKind == JsonValueKind.Null)
-        {
-            // Legacy files written before DataSource existed migrate to Windows.
-            return CodexDataSourceSelection.Windows;
-        }
-
-        var ds = element.Value;
-        if (ds.ValueKind != JsonValueKind.Object)
+        if (!TryGetObject(element, out var dataSource))
         {
             return CodexDataSourceSelection.Windows;
         }
 
-        string? kind = null;
-        if (ds.TryGetProperty("Kind", out var kindElement) && kindElement.ValueKind == JsonValueKind.String)
-        {
-            kind = kindElement.GetString();
-        }
+        string? kind = GetStringProperty(dataSource, "Kind");
+        string? distroName = GetStringProperty(dataSource, "WslDistributionName");
 
-        string? distroName = null;
-        if (ds.TryGetProperty("WslDistributionName", out var nameElement) && nameElement.ValueKind == JsonValueKind.String)
-        {
-            distroName = nameElement.GetString();
-        }
-
-        if (string.IsNullOrWhiteSpace(kind))
+        if (string.Equals(kind, nameof(CodexDataSourceKind.Windows), StringComparison.OrdinalIgnoreCase))
         {
             return CodexDataSourceSelection.Windows;
         }
 
-        if (string.Equals(kind, "Windows", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(kind, nameof(CodexDataSourceKind.Wsl), StringComparison.OrdinalIgnoreCase)
+            && distroName != null)
         {
-            // Windows must not carry a distribution name. If one is present
-            // (corrupted/tampered file) it is ignored: the selection falls back
-            // to a clean Windows selection with a null name.
-            return CodexDataSourceSelection.Windows;
-        }
-
-        if (string.Equals(kind, "Wsl", StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(distroName))
-            {
-                return CodexDataSourceSelection.Windows;
-            }
-
             try
             {
-                // ForWsl trims and validates; throws ArgumentException on an
-                // illegal name (slashes, control chars, traversal, etc.).
                 return CodexDataSourceSelection.ForWsl(distroName);
             }
             catch (ArgumentException)
@@ -574,23 +594,71 @@ public class TraySettingsStore : ITraySettingsStore
             }
         }
 
-        // Unknown Kind value.
         return CodexDataSourceSelection.Windows;
     }
 
-    // Builds the on-disk DataSource element from a selection. The shape is
-    // exactly { "Kind": <string>, "WslDistributionName": <string|null> }.
-    // Only Kind and the normalized distribution name are emitted; CodexHome,
-    // sessions paths, Linux user directories, and UNC paths are never written.
-    private static JsonElement BuildDataSourceElement(CodexDataSourceSelection selection)
+    private static JsonElement BuildPositionStateElement(OverlayPositionState state)
     {
-        var json = JsonSerializer.Serialize(new
+        PositionStateDto dto = state switch
+        {
+            OverlayPositionState.Preset preset => new PositionStateDto
+            {
+                Kind = nameof(OverlayPositionState.Preset),
+                Preset = preset.Value.ToString()
+            },
+            OverlayPositionState.Custom custom => new PositionStateDto
+            {
+                Kind = nameof(OverlayPositionState.Custom),
+                XRatio = custom.XRatio,
+                YRatio = custom.YRatio
+            },
+            _ => new PositionStateDto
+            {
+                Kind = nameof(OverlayPositionState.Preset),
+                Preset = nameof(OverlayPositionPreset.TopRight)
+            }
+        };
+
+        return JsonSerializer.SerializeToElement(dto, SerializerOptions);
+    }
+
+    private static JsonElement? BuildPositionStates(
+        IReadOnlyDictionary<string, OverlayPositionState>? positions)
+    {
+        if (positions == null || positions.Count == 0)
+        {
+            return null;
+        }
+
+        var result = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in positions)
+        {
+            if (!string.IsNullOrWhiteSpace(pair.Key) && pair.Value != null)
+            {
+                result[pair.Key] = BuildPositionStateElement(pair.Value);
+            }
+        }
+
+        return result.Count == 0
+            ? null
+            : JsonSerializer.SerializeToElement(result, SerializerOptions);
+    }
+
+    private static JsonElement? BuildDataSourceElement(CodexDataSourceSelection selection)
+    {
+        return JsonSerializer.SerializeToElement(new
         {
             Kind = selection.Kind.ToString(),
             WslDistributionName = selection.WslDistributionName
-        });
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement.Clone();
+        }, DataSourceSerializerOptions);
+    }
+
+    private sealed class PositionStateDto
+    {
+        public string? Kind { get; set; }
+        public string? Preset { get; set; }
+        public double? XRatio { get; set; }
+        public double? YRatio { get; set; }
     }
 
     private sealed class RawSettingsDto
@@ -600,22 +668,30 @@ public class TraySettingsStore : ITraySettingsStore
         public string? Language { get; set; }
         public bool? OverlayEnabled { get; set; }
         public bool? OverlayLocked { get; set; }
-        public double? OverlayLeft { get; set; }
-        public double? OverlayTop { get; set; }
+
+        // Kept only as a migration payload for pre-v0.4.0 absolute coordinates.
+        public JsonElement? OverlayLeft { get; set; }
+        public JsonElement? OverlayTop { get; set; }
+
         public string? ApplicationTheme { get; set; }
         public string? OverlayTheme { get; set; }
         public string? OverlayOpacity { get; set; }
-        public string? OverlayPosition { get; set; }
-        public string? OverlayMonitorDeviceName { get; set; }
-        public string? OverlayCustomPositionMode { get; set; }
-        public double? OverlayXRatio { get; set; }
-        public double? OverlayYRatio { get; set; }
-        public Dictionary<string, DisplayRelativePositionDto>? OverlayPerDisplayPositions { get; set; }
-        public string? OverlayCustomMonitorId { get; set; }
 
-        // Stored as a raw JsonElement so a malformed DataSource field can never
-        // destabilize deserialization of the rest of the DTO. ParseDataSource
-        // inspects the element defensively (see Load).
+        // Legacy position keys are read but never populated by RawSettingsDto(TraySettings).
+        public JsonElement? OverlayPosition { get; set; }
+        public JsonElement? OverlayMonitorDeviceName { get; set; }
+        public JsonElement? OverlayCustomPositionMode { get; set; }
+        public JsonElement? OverlayXRatio { get; set; }
+        public JsonElement? OverlayYRatio { get; set; }
+        public JsonElement? OverlayPerDisplayPositions { get; set; }
+        public JsonElement? OverlayCustomMonitorId { get; set; }
+
+        public JsonElement? PositionMemoryMode { get; set; }
+        public JsonElement? SharedPosition { get; set; }
+        public JsonElement? PerDisplayPositions { get; set; }
+        public JsonElement? OverlayTargetMonitorId { get; set; }
+        public JsonElement? PendingPresetMigrationTarget { get; set; }
+
         public JsonElement? DataSource { get; set; }
 
         public RawSettingsDto()
@@ -624,36 +700,45 @@ public class TraySettingsStore : ITraySettingsStore
 
         public RawSettingsDto(TraySettings settings)
         {
-            bool isPresetMode = settings.OverlayPosition.HasValue;
-
             SelectedWindow = settings.SelectedWindow.ToString();
             RefreshCadence = (int)settings.RefreshCadence;
             Language = settings.Language.ToString();
             OverlayEnabled = settings.OverlayEnabled;
             OverlayLocked = settings.OverlayLocked;
-            OverlayLeft = isPresetMode ? null : settings.OverlayLeft;
-            OverlayTop = isPresetMode ? null : settings.OverlayTop;
+            OverlayLeft = settings.SharedPosition == null
+                ? BuildNumberElement(settings.OverlayLeft)
+                : null;
+            OverlayTop = settings.SharedPosition == null
+                ? BuildNumberElement(settings.OverlayTop)
+                : null;
             ApplicationTheme = settings.ApplicationTheme.ToString();
             OverlayTheme = settings.OverlayTheme.ToString();
             OverlayOpacity = settings.OverlayOpacity.ToString();
-            OverlayPosition = settings.OverlayPosition?.ToString();
-            // Custom mode must not persist a residual monitor device name.
-            OverlayMonitorDeviceName = isPresetMode ? settings.OverlayMonitorDeviceName : null;
-            // The custom-position mode preference is always persisted so a
-            // preset-to-custom switch resumes the user's choice. The normalized
-            // ratios, per-display records, and custom monitor id are user-saved
-            // position state that must survive preset selection — selecting a
-            // preset only changes the current positioning method, not the saved
-            // custom state. Legacy absolute coords are only meaningful in custom
-            // mode and are not persisted while a preset is active.
-            OverlayCustomPositionMode = settings.OverlayCustomPositionMode.ToString();
-            OverlayXRatio = settings.OverlayXRatio;
-            OverlayYRatio = settings.OverlayYRatio;
-            OverlayPerDisplayPositions = BuildPerDisplayDto(settings.OverlayPerDisplayPositions);
-            OverlayCustomMonitorId = settings.OverlayCustomMonitorId;
-            // Only Kind and the normalized WslDistributionName are persisted.
-            // No CodexHome, sessions path, or UNC path is ever written.
+
+            PositionMemoryMode = JsonSerializer.SerializeToElement(
+                settings.PositionMemoryMode.ToString(),
+                SerializerOptions);
+            SharedPosition = settings.SharedPosition == null
+                ? null
+                : BuildPositionStateElement(settings.SharedPosition);
+            PerDisplayPositions = BuildPositionStates(settings.PerDisplayPositions);
+            OverlayTargetMonitorId = BuildTextElement(settings.OverlayTargetMonitorId);
+            PendingPresetMigrationTarget = BuildTextElement(settings.PendingPresetMigrationTarget);
             DataSource = BuildDataSourceElement(settings.DataSource);
         }
+    }
+
+    private static JsonElement? BuildTextElement(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? null
+            : JsonSerializer.SerializeToElement(value.Trim(), SerializerOptions);
+    }
+
+    private static JsonElement? BuildNumberElement(double? value)
+    {
+        return value.HasValue
+            ? JsonSerializer.SerializeToElement(value.Value, SerializerOptions)
+            : null;
     }
 }

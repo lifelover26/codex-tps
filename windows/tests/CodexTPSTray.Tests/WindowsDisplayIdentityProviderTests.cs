@@ -229,6 +229,9 @@ public sealed class WindowsDisplayIdentityProviderTests
         AssertOffset<Native.DISPLAYCONFIG_PATH_SOURCE_INFO>(nameof(Native.DISPLAYCONFIG_PATH_SOURCE_INFO.id), 8);
         AssertOffset<Native.DISPLAYCONFIG_PATH_SOURCE_INFO>(nameof(Native.DISPLAYCONFIG_PATH_SOURCE_INFO.modeInfoIdx), 12);
         AssertOffset<Native.DISPLAYCONFIG_PATH_SOURCE_INFO>(nameof(Native.DISPLAYCONFIG_PATH_SOURCE_INFO.statusFlags), 16);
+        AssertOffset<Native.DISPLAYCONFIG_PATH_SOURCE_INFO_MODE_INFO>(nameof(Native.DISPLAYCONFIG_PATH_SOURCE_INFO_MODE_INFO.modeInfoIdx), 0);
+        AssertOffset<Native.DISPLAYCONFIG_PATH_SOURCE_INFO_MODE_INFO>(nameof(Native.DISPLAYCONFIG_PATH_SOURCE_INFO_MODE_INFO.cloneGroupId), 0);
+        AssertOffset<Native.DISPLAYCONFIG_PATH_SOURCE_INFO_MODE_INFO>(nameof(Native.DISPLAYCONFIG_PATH_SOURCE_INFO_MODE_INFO.sourceModeInfoIdx), 2);
 
         AssertOffset<Native.DISPLAYCONFIG_PATH_TARGET_INFO>(nameof(Native.DISPLAYCONFIG_PATH_TARGET_INFO.adapterId), 0);
         AssertOffset<Native.DISPLAYCONFIG_PATH_TARGET_INFO>(nameof(Native.DISPLAYCONFIG_PATH_TARGET_INFO.id), 8);
@@ -240,6 +243,9 @@ public sealed class WindowsDisplayIdentityProviderTests
         AssertOffset<Native.DISPLAYCONFIG_PATH_TARGET_INFO>(nameof(Native.DISPLAYCONFIG_PATH_TARGET_INFO.scanLineOrdering), 36);
         AssertOffset<Native.DISPLAYCONFIG_PATH_TARGET_INFO>(nameof(Native.DISPLAYCONFIG_PATH_TARGET_INFO.targetAvailable), 40);
         AssertOffset<Native.DISPLAYCONFIG_PATH_TARGET_INFO>(nameof(Native.DISPLAYCONFIG_PATH_TARGET_INFO.statusFlags), 44);
+        AssertOffset<Native.DISPLAYCONFIG_PATH_TARGET_INFO_MODE_INFO>(nameof(Native.DISPLAYCONFIG_PATH_TARGET_INFO_MODE_INFO.modeInfoIdx), 0);
+        AssertOffset<Native.DISPLAYCONFIG_PATH_TARGET_INFO_MODE_INFO>(nameof(Native.DISPLAYCONFIG_PATH_TARGET_INFO_MODE_INFO.desktopModeInfoIdx), 0);
+        AssertOffset<Native.DISPLAYCONFIG_PATH_TARGET_INFO_MODE_INFO>(nameof(Native.DISPLAYCONFIG_PATH_TARGET_INFO_MODE_INFO.targetModeInfoIdx), 2);
 
         AssertOffset<Native.DISPLAYCONFIG_PATH_INFO>(nameof(Native.DISPLAYCONFIG_PATH_INFO.sourceInfo), 0);
         AssertOffset<Native.DISPLAYCONFIG_PATH_INFO>(nameof(Native.DISPLAYCONFIG_PATH_INFO.targetInfo), 20);
@@ -252,6 +258,11 @@ public sealed class WindowsDisplayIdentityProviderTests
         AssertOffset<Native.DISPLAYCONFIG_VIDEO_SIGNAL_INFO>(nameof(Native.DISPLAYCONFIG_VIDEO_SIGNAL_INFO.totalSize), 32);
         AssertOffset<Native.DISPLAYCONFIG_VIDEO_SIGNAL_INFO>(nameof(Native.DISPLAYCONFIG_VIDEO_SIGNAL_INFO.additionalSignalInfo), 40);
         AssertOffset<Native.DISPLAYCONFIG_VIDEO_SIGNAL_INFO>(nameof(Native.DISPLAYCONFIG_VIDEO_SIGNAL_INFO.scanLineOrdering), 44);
+        AssertOffset<Native.DISPLAYCONFIG_RATIONAL>(nameof(Native.DISPLAYCONFIG_RATIONAL.Numerator), 0);
+        AssertOffset<Native.DISPLAYCONFIG_RATIONAL>(nameof(Native.DISPLAYCONFIG_RATIONAL.Denominator), 4);
+        AssertOffset<Native.DISPLAYCONFIG_2DREGION>(nameof(Native.DISPLAYCONFIG_2DREGION.cx), 0);
+        AssertOffset<Native.DISPLAYCONFIG_2DREGION>(nameof(Native.DISPLAYCONFIG_2DREGION.cy), 4);
+        AssertOffset<Native.DISPLAYCONFIG_TARGET_MODE>(nameof(Native.DISPLAYCONFIG_TARGET_MODE.targetVideoSignalInfo), 0);
 
         AssertOffset<Native.DISPLAYCONFIG_SOURCE_MODE>(nameof(Native.DISPLAYCONFIG_SOURCE_MODE.width), 0);
         AssertOffset<Native.DISPLAYCONFIG_SOURCE_MODE>(nameof(Native.DISPLAYCONFIG_SOURCE_MODE.height), 4);
