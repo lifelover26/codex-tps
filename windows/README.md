@@ -4,6 +4,8 @@ A privacy-first Windows 11 tray monitor for local Codex token throughput.
 The release is a self-contained Portable ZIP: extract it and run the executable;
 no installer or separately installed .NET runtime is required.
 
+**What's new in v0.4.2:** Adds independent overlay appearance memory. The new Memory menu separates Appearance and Position memory, so theme plus opacity can be shared across displays or remembered independently per physical display. Existing position memory remains independent and existing settings migrate with shared appearance as the default.
+
 **What's new in v0.4.1:** Position memory is now independent of position type. Shared mode and per-display mode remember the complete overlay state, including quick presets and custom positions. Per-display mode uses stable physical display identities, so switching with Windows "show only on 1/2" restores the correct display-specific state.
 
 **What's new in v0.4.0:** Adds two custom overlay position modes: **Keep Relative Position** and **Remember per display**. Remember per display stores an independent relative position for each physical monitor. Physical monitor identity uses the Windows display device path, so laptop internal and external displays remain distinguishable even when Windows reuses `\\.\DISPLAY1` under the "show only on 1/2" topology. Existing legacy `DeviceName`-keyed settings are migrated when possible and fall back safely to `DeviceName` when the native identity is unavailable.
@@ -110,7 +112,7 @@ no installer or separately installed .NET runtime is required.
 
 ### Install and Run
 
-1. Download `Codex-TPS-Windows-x64-Portable-0.4.1.zip` and its `.sha256` file.
+1. Download `Codex-TPS-Windows-x64-Portable-0.4.2.zip` and its `.sha256` file.
 2. Verify the checksum before extracting the ZIP.
 3. Extract the ZIP to a stable writable directory, for example:
 
@@ -276,7 +278,7 @@ Existing settings remain in `%LOCALAPPDATA%\CodexTPS`.
 Do not run or extract the package if verification fails.
 
 ```powershell
-$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.4.1.zip"
+$zipPath = ".\Codex-TPS-Windows-x64-Portable-0.4.2.zip"
 $checksumPath = "$zipPath.sha256"
 
 $expectedHash = (Get-Content $checksumPath -Raw).Split('  ')[0].Trim()
@@ -320,14 +322,14 @@ dotnet format .\windows\CodexTPS.slnx --verify-no-changes
 Create the x64 Portable release:
 
 ```powershell
-.\windows\scripts\New-Release.ps1 -Version 0.4.1
+.\windows\scripts\New-Release.ps1 -Version 0.4.2
 ```
 
 The script creates:
 
 ```text
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.4.1.zip
-windows\artifacts\Codex-TPS-Windows-x64-Portable-0.4.1.zip.sha256
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.4.2.zip
+windows\artifacts\Codex-TPS-Windows-x64-Portable-0.4.2.zip.sha256
 ```
 
 The ZIP contains exactly:
@@ -341,6 +343,8 @@ The ZIP contains exactly:
 Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 token
 吞吐率的 Windows 11 托盘工具。发布包为自包含 Portable ZIP：解压后即可
 运行，不需要安装程序，也不需要单独安装 .NET 运行时。
+
+**v0.4.2 更新：** 新增独立的悬浮窗外观记忆。新的“记忆”菜单将“外观”和“位置”分开，主题与透明度可以跨屏共用，也可以按物理显示器分别记忆；现有位置记忆保持独立，旧设置会迁移为默认的跨屏共用外观。
 
 **v0.4.1 更新：** 位置记忆现在独立于位置类型。跨屏共用和按显示器记忆都会保存完整的悬浮窗状态，包括快速定位和自定义位置；按显示器记忆使用稳定的物理显示器身份，在 Windows“仅在 1/2 上显示”切换后也能恢复对应显示器的位置。
 
@@ -423,7 +427,7 @@ Codex TPS Windows 版是一个仅在本地读取 Codex 会话日志、显示 tok
 
 ### 安装与启动
 
-1. 下载 `Codex-TPS-Windows-x64-Portable-0.4.1.zip` 和对应的 `.sha256`。
+1. 下载 `Codex-TPS-Windows-x64-Portable-0.4.2.zip` 和对应的 `.sha256`。
 2. 校验 SHA-256 后再解压。
 3. 解压到稳定且可写的目录，例如 `%USERPROFILE%\Apps\CodexTPS`。
 4. 运行 `CodexTPSTray.exe`。
@@ -549,7 +553,7 @@ Alt+Tab 中，普通截图和录屏会包含它。
 dotnet build .\windows\CodexTPS.slnx
 dotnet test .\windows\CodexTPS.slnx
 dotnet format .\windows\CodexTPS.slnx --verify-no-changes
-.\windows\scripts\New-Release.ps1 -Version 0.4.1
+.\windows\scripts\New-Release.ps1 -Version 0.4.2
 ```
 
 发布脚本会生成 Portable ZIP 和对应的 SHA-256 文件。

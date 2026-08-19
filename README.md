@@ -39,6 +39,8 @@ Codex TPS for Windows reads the usage events already written to local Codex
 session logs and turns them into an at-a-glance throughput display. It does not
 require an API key and does not upload conversation data.
 
+**What's new in v0.4.2:** Adds independent overlay appearance memory. The new Memory menu separates Appearance and Position memory, so theme plus opacity can be shared across displays or remembered independently per physical display. Existing position memory remains independent and existing settings migrate with shared appearance as the default.
+
 **What's new in v0.4.1:** Position memory is now independent of position type. Shared mode and per-display mode remember the complete overlay state, including quick presets and custom positions. Per-display mode uses stable physical display identities, so switching with Windows "show only on 1/2" restores the correct display-specific state.
 
 **What's new in v0.4.0:** Adds two custom overlay position modes: **Keep Relative Position** and **Remember per display**. Remember per display stores an independent relative position for each physical monitor. Physical monitor identity uses the Windows display device path, so laptop internal and external displays remain distinguishable even when Windows reuses `\\.\DISPLAY1` under the "show only on 1/2" topology. Existing legacy `DeviceName`-keyed settings are migrated when possible and fall back safely to `DeviceName` when the native identity is unavailable.
@@ -154,6 +156,8 @@ troubleshooting, removal, and release packaging.
 Codex TPS for Windows 是一款 Windows 11 托盘工具。它读取 Codex 已写入
 本机的会话用量记录，显示不同时间窗口内的 token 吞吐率。程序本身不需要
 API Key，也不会上传对话内容。
+
+**v0.4.2 更新：** 新增独立的悬浮窗外观记忆。新的“记忆”菜单将“外观”和“位置”分开，主题与透明度可以跨屏共用，也可以按物理显示器分别记忆；现有位置记忆保持独立，旧设置会迁移为默认的跨屏共用外观。
 
 **v0.4.1 更新：** 位置记忆现在独立于位置类型。跨屏共用和按显示器记忆都会保存完整的悬浮窗状态，包括快速定位和自定义位置；按显示器记忆使用稳定的物理显示器身份，在 Windows“仅在 1/2 上显示”切换后也能恢复对应显示器的位置。
 
