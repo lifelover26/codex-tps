@@ -167,7 +167,7 @@ public class TrayIconManagerMenuStructureTests
     }
 
     [Fact]
-    public Task Menu_OverlaySubmenu_HasPositionMemorySubmenu()
+    public Task Menu_OverlaySubmenu_HasMemorySubmenu()
     {
         return WpfTestHelpers.RunInStaWithWpfAsync(async () =>
         {
@@ -192,14 +192,15 @@ public class TrayIconManagerMenuStructureTests
                 .Select(i => i is ToolStripMenuItem mi ? mi.Text : "-")
                 .ToList();
 
-            Assert.Contains("Position Memory", allItemTexts);
+            Assert.Contains("Memory", allItemTexts);
+            Assert.Contains("Appearance", allItemTexts);
             Assert.Contains("Shared across displays", allItemTexts);
             Assert.Contains("Remember per display", allItemTexts);
         });
     }
 
     [Fact]
-    public Task Menu_OverlaySubmenu_PositionMemorySubmenu_Chinese()
+    public Task Menu_OverlaySubmenu_MemorySubmenu_Chinese()
     {
         return WpfTestHelpers.RunInStaWithWpfAsync(async () =>
         {
@@ -224,7 +225,8 @@ public class TrayIconManagerMenuStructureTests
                 .Select(i => i is ToolStripMenuItem mi ? mi.Text : "-")
                 .ToList();
 
-            Assert.Contains("位置记忆", allItemTexts);
+            Assert.Contains("记忆", allItemTexts);
+            Assert.Contains("外观", allItemTexts);
             Assert.Contains("跨屏共用", allItemTexts);
             Assert.Contains("按显示器记忆", allItemTexts);
         });
@@ -256,11 +258,13 @@ public class TrayIconManagerMenuStructureTests
                 .OfType<ToolStripMenuItem>()
                 .ToList();
 
-            var sharedAcrossDisplays = allItems.First(i => i.Text == "Shared across displays");
-            var rememberPerDisplay = allItems.First(i => i.Text == "Remember per display");
+            var sharedItems = allItems.Where(i => i.Text == "Shared across displays").ToList();
+            var rememberItems = allItems.Where(i => i.Text == "Remember per display").ToList();
 
-            Assert.True(sharedAcrossDisplays.Checked);
-            Assert.False(rememberPerDisplay.Checked);
+            Assert.True(sharedItems.Count >= 2, "Should have at least two Shared-across-displays items (position + appearance)");
+            Assert.True(rememberItems.Count >= 2, "Should have at least two Remember-per-display items (position + appearance)");
+            Assert.All(sharedItems, item => Assert.True(item.Checked));
+            Assert.All(rememberItems, item => Assert.False(item.Checked));
         });
     }
 }

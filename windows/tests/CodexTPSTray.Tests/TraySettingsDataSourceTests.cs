@@ -102,6 +102,108 @@ public class TraySettingsDataSourceTests : IDisposable
     }
 
     [Fact]
+    public void CompatibilityConstructor_DefaultsAppearanceMemoryFields()
+    {
+        var settings = new TraySettings(
+            MetricWindow.OneMinute,
+            RefreshCadence.FifteenSeconds,
+            Language.English,
+            OverlayEnabled: false,
+            OverlayLocked: false,
+            OverlayLeft: null,
+            OverlayTop: null,
+            ApplicationTheme: ApplicationThemePreference.System,
+            OverlayTheme: OverlayThemePreference.FollowApplication,
+            OverlayOpacity: OverlayOpacityPreference.Default,
+            PositionMemoryMode: OverlayPositionMemoryMode.SharedAcrossDisplays,
+            SharedPosition: new OverlayPositionState.Preset(OverlayPositionPreset.TopRight),
+            PerDisplayPositions: null,
+            OverlayTargetMonitorId: null,
+            DataSource: CodexDataSourceSelection.ForWsl("Ubuntu"));
+
+        Assert.Equal(
+            OverlayAppearanceMemoryMode.SharedAcrossDisplays,
+            settings.AppearanceMemoryMode);
+        Assert.Null(settings.SharedAppearance);
+        Assert.Null(settings.PerDisplayAppearances);
+        Assert.Null(settings.PendingPresetMigrationTarget);
+        Assert.Equal(CodexDataSourceKind.Wsl, settings.DataSource.Kind);
+    }
+
+    [Fact]
+    public void FullConstructor_PassesAllAppearanceMemoryFields()
+    {
+        var sharedAppearance = new OverlayAppearanceState(
+            OverlayThemePreference.Dark,
+            OverlayOpacityPreference.Percent70);
+        var perDisplay = new System.Collections.Generic.Dictionary<string, OverlayAppearanceState>
+        {
+            ["physical-a"] = new OverlayAppearanceState(
+                OverlayThemePreference.Light,
+                OverlayOpacityPreference.Percent85)
+        };
+
+        var settings = new TraySettings(
+            MetricWindow.OneMinute,
+            RefreshCadence.FifteenSeconds,
+            Language.English,
+            OverlayEnabled: true,
+            OverlayLocked: false,
+            OverlayLeft: null,
+            OverlayTop: null,
+            ApplicationTheme: ApplicationThemePreference.System,
+            OverlayTheme: OverlayThemePreference.Dark,
+            OverlayOpacity: OverlayOpacityPreference.Percent70,
+            PositionMemoryMode: OverlayPositionMemoryMode.RememberPerDisplay,
+            SharedPosition: new OverlayPositionState.Preset(OverlayPositionPreset.BottomLeft),
+            PerDisplayPositions: null,
+            OverlayTargetMonitorId: "physical-a",
+            PendingPresetMigrationTarget: "physical-b",
+            AppearanceMemoryMode: OverlayAppearanceMemoryMode.RememberPerDisplay,
+            SharedAppearance: sharedAppearance,
+            PerDisplayAppearances: perDisplay,
+            DataSource: CodexDataSourceSelection.ForWsl("Ubuntu"));
+
+        Assert.Equal(
+            OverlayAppearanceMemoryMode.RememberPerDisplay,
+            settings.AppearanceMemoryMode);
+        Assert.Same(sharedAppearance, settings.SharedAppearance);
+        Assert.NotNull(settings.PerDisplayAppearances);
+        Assert.Equal(
+            OverlayThemePreference.Light,
+            settings.PerDisplayAppearances!["physical-a"].ThemePreference);
+        Assert.Equal("physical-b", settings.PendingPresetMigrationTarget);
+        Assert.Equal(CodexDataSourceKind.Wsl, settings.DataSource.Kind);
+        Assert.Equal("Ubuntu", settings.DataSource.WslDistributionName);
+    }
+
+    [Fact]
+    public void FullConstructor_AllFields_RejectsNullDataSource()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            new TraySettings(
+                MetricWindow.OneMinute,
+                RefreshCadence.FifteenSeconds,
+                Language.English,
+                OverlayEnabled: false,
+                OverlayLocked: false,
+                OverlayLeft: null,
+                OverlayTop: null,
+                ApplicationTheme: ApplicationThemePreference.System,
+                OverlayTheme: OverlayThemePreference.FollowApplication,
+                OverlayOpacity: OverlayOpacityPreference.Default,
+                PositionMemoryMode: OverlayPositionMemoryMode.SharedAcrossDisplays,
+                SharedPosition: new OverlayPositionState.Preset(OverlayPositionPreset.TopRight),
+                PerDisplayPositions: null,
+                OverlayTargetMonitorId: null,
+                PendingPresetMigrationTarget: null,
+                AppearanceMemoryMode: OverlayAppearanceMemoryMode.SharedAcrossDisplays,
+                SharedAppearance: null,
+                PerDisplayAppearances: null,
+                DataSource: null!));
+    }
+
+    [Fact]
     public void WithExpression_CanChangeDataSourceAndPreservesOtherFields()
     {
         var windows = new TraySettings(MetricWindow.OneMinute, RefreshCadence.FifteenSeconds);

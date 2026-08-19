@@ -18,6 +18,9 @@ internal static class OverlayMenuDefinition
     public static IReadOnlyList<OverlayPositionMemoryMode> PositionMemoryModes { get; } =
         Enum.GetValues<OverlayPositionMemoryMode>();
 
+    public static IReadOnlyList<OverlayAppearanceMemoryMode> AppearanceMemoryModes { get; } =
+        Enum.GetValues<OverlayAppearanceMemoryMode>();
+
     public static string GetPositionText(OverlayPositionPreset preset, Language language)
         => Localization.GetPositionPresetDisplayName(preset, language);
 
@@ -29,4 +32,7 @@ internal static class OverlayMenuDefinition
 
     public static string GetPositionMemoryModeText(OverlayPositionMemoryMode mode, Language language)
         => Localization.GetPositionMemoryModeDisplayName(mode, language);
+
+    public static string GetAppearanceMemoryModeText(OverlayAppearanceMemoryMode mode, Language language)
+        => Localization.GetAppearanceMemoryModeDisplayName(mode, language);
 }

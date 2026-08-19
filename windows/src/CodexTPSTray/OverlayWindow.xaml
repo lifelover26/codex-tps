@@ -152,17 +152,11 @@
                 <MenuItem x:Name="ShowOverlayMenuItem" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnShowOverlayClicked"/>
                 <MenuItem x:Name="LockOverlayMenuItem" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnLockOverlayClicked"/>
                 <Separator/>
-                <MenuItem x:Name="PositionSubmenu" Style="{StaticResource OverlayMenuItemStyle}">
-                    <MenuItem x:Name="PositionTopLeft" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
-                    <MenuItem x:Name="PositionTopRight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
-                    <MenuItem x:Name="PositionMiddleLeft" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
-                    <MenuItem x:Name="PositionMiddleRight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
-                    <MenuItem x:Name="PositionBottomLeft" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
-                    <MenuItem x:Name="PositionBottomRight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
-                </MenuItem>
-                <MenuItem x:Name="PositionMemorySubmenu" Style="{StaticResource OverlayMenuItemStyle}">
-                    <MenuItem x:Name="PositionMemoryShared" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionMemoryModeClicked"/>
-                    <MenuItem x:Name="PositionMemoryRememberPerDisplay" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionMemoryModeClicked"/>
+                <MenuItem x:Name="ThemeSubmenu" Style="{StaticResource OverlayMenuItemStyle}">
+                    <MenuItem x:Name="ThemeFollowApp" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
+                    <MenuItem x:Name="ThemeSystem" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
+                    <MenuItem x:Name="ThemeLight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
+                    <MenuItem x:Name="ThemeDark" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
                 </MenuItem>
                 <MenuItem x:Name="OpacitySubmenu" Style="{StaticResource OverlayMenuItemStyle}">
                     <MenuItem x:Name="OpacityDefault" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnOpacityClicked"/>
@@ -172,11 +166,23 @@
                     <MenuItem x:Name="Opacity85" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnOpacityClicked"/>
                     <MenuItem x:Name="OpacityOpaque" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnOpacityClicked"/>
                 </MenuItem>
-                <MenuItem x:Name="ThemeSubmenu" Style="{StaticResource OverlayMenuItemStyle}">
-                    <MenuItem x:Name="ThemeFollowApp" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
-                    <MenuItem x:Name="ThemeSystem" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
-                    <MenuItem x:Name="ThemeLight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
-                    <MenuItem x:Name="ThemeDark" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnThemeClicked"/>
+                <MenuItem x:Name="PositionSubmenu" Style="{StaticResource OverlayMenuItemStyle}">
+                    <MenuItem x:Name="PositionTopLeft" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                    <MenuItem x:Name="PositionTopRight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                    <MenuItem x:Name="PositionMiddleLeft" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                    <MenuItem x:Name="PositionMiddleRight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                    <MenuItem x:Name="PositionBottomLeft" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                    <MenuItem x:Name="PositionBottomRight" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionClicked"/>
+                </MenuItem>
+                <MenuItem x:Name="MemorySubmenu" Style="{StaticResource OverlayMenuItemStyle}">
+                    <MenuItem x:Name="AppearanceMemorySubmenu" Style="{StaticResource OverlayMenuItemStyle}">
+                        <MenuItem x:Name="AppearanceMemoryShared" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnAppearanceMemoryModeClicked"/>
+                        <MenuItem x:Name="AppearanceMemoryRememberPerDisplay" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnAppearanceMemoryModeClicked"/>
+                    </MenuItem>
+                    <MenuItem x:Name="PositionMemorySubmenu" Style="{StaticResource OverlayMenuItemStyle}">
+                        <MenuItem x:Name="PositionMemoryShared" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionMemoryModeClicked"/>
+                        <MenuItem x:Name="PositionMemoryRememberPerDisplay" Style="{StaticResource OverlayMenuItemStyle}" IsCheckable="True" Click="OnPositionMemoryModeClicked"/>
+                    </MenuItem>
                 </MenuItem>
             </ContextMenu>
         </Border.ContextMenu>

@@ -438,6 +438,26 @@ public static class Localization
         };
     }
 
+    public static string MemoryMenu(Language language)
+    {
+        return language == Language.Chinese ? "记忆" : "Memory";
+    }
+
+    public static string AppearanceMemoryMenu(Language language)
+    {
+        return language == Language.Chinese ? "外观" : "Appearance";
+    }
+
+    public static string GetAppearanceMemoryModeDisplayName(OverlayAppearanceMemoryMode mode, Language language)
+    {
+        return mode switch
+        {
+            OverlayAppearanceMemoryMode.SharedAcrossDisplays => language == Language.Chinese ? "跨屏共用" : "Shared across displays",
+            OverlayAppearanceMemoryMode.RememberPerDisplay => language == Language.Chinese ? "按显示器记忆" : "Remember per display",
+            _ => language == Language.Chinese ? "跨屏共用" : "Shared across displays"
+        };
+    }
+
     public static string BackgroundOpacityMenu(Language language)
     {
         return language == Language.Chinese ? "背景不透明度" : "Background Opacity";

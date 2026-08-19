@@ -62,8 +62,11 @@ public class TraySettingsStore : ITraySettingsStore
             PositionMigration position = HasNewPositionFields(raw)
                 ? ParseNewPosition(raw)
                 : ParseLegacyPosition(raw);
+            AppearanceMigration appearance = HasNewAppearanceFields(raw)
+                ? ParseNewAppearance(raw)
+                : ParseLegacyAppearance(raw);
 
-            return CreateSettings(raw, position, dataSource);
+            return CreateSettings(raw, position, appearance, dataSource);
         }
         catch
         {
@@ -163,9 +166,15 @@ public class TraySettingsStore : ITraySettingsStore
         double? LegacyLeft,
         double? LegacyTop);
 
+    private sealed record AppearanceMigration(
+        OverlayAppearanceMemoryMode AppearanceMemoryMode,
+        OverlayAppearanceState? SharedAppearance,
+        IReadOnlyDictionary<string, OverlayAppearanceState>? PerDisplayAppearances);
+
     private static TraySettings CreateSettings(
         RawSettingsDto raw,
         PositionMigration position,
+        AppearanceMigration appearance,
         CodexDataSourceSelection dataSource)
     {
         bool hasLegacyCoordinates = position.LegacyLeft.HasValue && position.LegacyTop.HasValue;
@@ -185,6 +194,18 @@ public class TraySettingsStore : ITraySettingsStore
             ? position.PendingPresetMigrationTarget
             : null;
 
+        OverlayThemePreference overlayTheme = ParseOverlayTheme(raw.OverlayTheme);
+        OverlayOpacityPreference overlayOpacity = ParseOverlayOpacity(raw.OverlayOpacity);
+
+        // A pre-v0.4.2 file has no appearance memory fields. Migrate
+        // SharedAppearance from the scalar theme/opacity so the visual effect
+        // is unchanged and per-display mode has an inheritance seed.
+        OverlayAppearanceState? sharedAppearance = appearance.SharedAppearance;
+        if (sharedAppearance == null)
+        {
+            sharedAppearance = new OverlayAppearanceState(overlayTheme, overlayOpacity);
+        }
+
         return new TraySettings(
             SelectedWindow: ParseMetricWindow(raw.SelectedWindow),
             RefreshCadence: ParseRefreshCadence(raw.RefreshCadence),
@@ -194,13 +215,16 @@ public class TraySettingsStore : ITraySettingsStore
             OverlayLeft: legacyLeft,
             OverlayTop: legacyTop,
             ApplicationTheme: ParseApplicationTheme(raw.ApplicationTheme),
-            OverlayTheme: ParseOverlayTheme(raw.OverlayTheme),
-            OverlayOpacity: ParseOverlayOpacity(raw.OverlayOpacity),
+            OverlayTheme: overlayTheme,
+            OverlayOpacity: overlayOpacity,
             PositionMemoryMode: position.PositionMemoryMode,
             SharedPosition: sharedPosition,
             PerDisplayPositions: position.PerDisplayPositions,
             OverlayTargetMonitorId: position.OverlayTargetMonitorId,
-            PendingPresetMigrationTarget: pendingPresetTarget)
+            PendingPresetMigrationTarget: pendingPresetTarget,
+            AppearanceMemoryMode: appearance.AppearanceMemoryMode,
+            SharedAppearance: sharedAppearance,
+            PerDisplayAppearances: appearance.PerDisplayAppearances)
         {
             DataSource = dataSource
         };
@@ -309,6 +333,113 @@ public class TraySettingsStore : ITraySettingsStore
         }
 
         return OverlayPositionMemoryMode.SharedAcrossDisplays;
+    }
+
+    private static bool HasNewAppearanceFields(RawSettingsDto raw)
+    {
+        return HasJsonValue(raw.AppearanceMemoryMode)
+            || HasJsonValue(raw.SharedAppearance)
+            || HasJsonValue(raw.PerDisplayAppearances);
+    }
+
+    private static AppearanceMigration ParseNewAppearance(RawSettingsDto raw)
+    {
+        return new AppearanceMigration(
+            AppearanceMemoryMode: ParseAppearanceMemoryMode(raw.AppearanceMemoryMode),
+            SharedAppearance: ParseAppearanceState(raw.SharedAppearance),
+            PerDisplayAppearances: ParseAppearanceStates(raw.PerDisplayAppearances));
+    }
+
+    private static AppearanceMigration ParseLegacyAppearance(RawSettingsDto raw)
+    {
+        return new AppearanceMigration(
+            OverlayAppearanceMemoryMode.SharedAcrossDisplays,
+            null,
+            null);
+    }
+
+    private static OverlayAppearanceMemoryMode ParseAppearanceMemoryMode(JsonElement? element)
+    {
+        string? value = ParseText(element);
+        if (value != null
+            && Enum.TryParse<OverlayAppearanceMemoryMode>(value, true, out var mode)
+            && Enum.IsDefined(mode))
+        {
+            return mode;
+        }
+
+        return OverlayAppearanceMemoryMode.SharedAcrossDisplays;
+    }
+
+    private static OverlayAppearanceState? ParseAppearanceState(JsonElement? element)
+    {
+        if (!TryGetObject(element, out var state))
+        {
+            return null;
+        }
+
+        OverlayThemePreference? theme = TryParseOverlayTheme(
+            GetStringProperty(state, "ThemePreference"));
+        OverlayOpacityPreference? opacity = TryParseOverlayOpacity(
+            GetStringProperty(state, "OpacityPreference"));
+        if (theme == null || opacity == null)
+        {
+            return null;
+        }
+
+        return new OverlayAppearanceState(theme.Value, opacity.Value);
+    }
+
+    private static IReadOnlyDictionary<string, OverlayAppearanceState>? ParseAppearanceStates(
+        JsonElement? element)
+    {
+        if (!TryGetObject(element, out var appearances))
+        {
+            return null;
+        }
+
+        var result = new Dictionary<string, OverlayAppearanceState>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (JsonProperty property in appearances.EnumerateObject())
+        {
+            if (string.IsNullOrWhiteSpace(property.Name))
+            {
+                continue;
+            }
+
+            OverlayAppearanceState? state = ParseAppearanceState(property.Value);
+            if (state != null)
+            {
+                result[property.Name] = state;
+            }
+        }
+
+        return result.Count == 0 ? null : result;
+    }
+
+    private static OverlayThemePreference? TryParseOverlayTheme(string? value)
+    {
+        return value?.ToLowerInvariant() switch
+        {
+            "followapplication" => OverlayThemePreference.FollowApplication,
+            "system" => OverlayThemePreference.System,
+            "light" => OverlayThemePreference.Light,
+            "dark" => OverlayThemePreference.Dark,
+            _ => null
+        };
+    }
+
+    private static OverlayOpacityPreference? TryParseOverlayOpacity(string? value)
+    {
+        if (value != null
+            && Enum.TryParse<OverlayOpacityPreference>(value, true, out var preference)
+            && Enum.IsDefined(preference))
+        {
+            return preference;
+        }
+
+        return null;
     }
 
     private static OverlayPositionState? ParsePositionState(JsonElement? element)
@@ -644,6 +775,39 @@ public class TraySettingsStore : ITraySettingsStore
             : JsonSerializer.SerializeToElement(result, SerializerOptions);
     }
 
+    private static JsonElement BuildAppearanceStateElement(OverlayAppearanceState state)
+    {
+        var dto = new AppearanceStateDto
+        {
+            ThemePreference = state.ThemePreference.ToString(),
+            OpacityPreference = state.OpacityPreference.ToString()
+        };
+
+        return JsonSerializer.SerializeToElement(dto, SerializerOptions);
+    }
+
+    private static JsonElement? BuildAppearanceStates(
+        IReadOnlyDictionary<string, OverlayAppearanceState>? appearances)
+    {
+        if (appearances == null || appearances.Count == 0)
+        {
+            return null;
+        }
+
+        var result = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in appearances)
+        {
+            if (!string.IsNullOrWhiteSpace(pair.Key) && pair.Value != null)
+            {
+                result[pair.Key] = BuildAppearanceStateElement(pair.Value);
+            }
+        }
+
+        return result.Count == 0
+            ? null
+            : JsonSerializer.SerializeToElement(result, SerializerOptions);
+    }
+
     private static JsonElement? BuildDataSourceElement(CodexDataSourceSelection selection)
     {
         return JsonSerializer.SerializeToElement(new
@@ -659,6 +823,12 @@ public class TraySettingsStore : ITraySettingsStore
         public string? Preset { get; set; }
         public double? XRatio { get; set; }
         public double? YRatio { get; set; }
+    }
+
+    private sealed class AppearanceStateDto
+    {
+        public string? ThemePreference { get; set; }
+        public string? OpacityPreference { get; set; }
     }
 
     private sealed class RawSettingsDto
@@ -692,6 +862,10 @@ public class TraySettingsStore : ITraySettingsStore
         public JsonElement? OverlayTargetMonitorId { get; set; }
         public JsonElement? PendingPresetMigrationTarget { get; set; }
 
+        public JsonElement? AppearanceMemoryMode { get; set; }
+        public JsonElement? SharedAppearance { get; set; }
+        public JsonElement? PerDisplayAppearances { get; set; }
+
         public JsonElement? DataSource { get; set; }
 
         public RawSettingsDto()
@@ -724,6 +898,13 @@ public class TraySettingsStore : ITraySettingsStore
             PerDisplayPositions = BuildPositionStates(settings.PerDisplayPositions);
             OverlayTargetMonitorId = BuildTextElement(settings.OverlayTargetMonitorId);
             PendingPresetMigrationTarget = BuildTextElement(settings.PendingPresetMigrationTarget);
+            AppearanceMemoryMode = JsonSerializer.SerializeToElement(
+                settings.AppearanceMemoryMode.ToString(),
+                SerializerOptions);
+            SharedAppearance = settings.SharedAppearance == null
+                ? null
+                : BuildAppearanceStateElement(settings.SharedAppearance);
+            PerDisplayAppearances = BuildAppearanceStates(settings.PerDisplayAppearances);
             DataSource = BuildDataSourceElement(settings.DataSource);
         }
     }

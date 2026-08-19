@@ -465,4 +465,221 @@ public class TraySettingsStoreTests : IDisposable
         Assert.True(store.TrySave(TraySettings.Default));
         Assert.Empty(Directory.GetFiles(_tempDirectory, "*.tmp"));
     }
+
+    [Fact]
+    public void AppearanceMemory_DefaultIsSharedAcrossDisplays()
+    {
+        var settings = Load();
+
+        Assert.Equal(
+            OverlayAppearanceMemoryMode.SharedAcrossDisplays,
+            settings.AppearanceMemoryMode);
+        Assert.Null(settings.PerDisplayAppearances);
+    }
+
+    [Fact]
+    public void AppearanceMemory_RoundTrip()
+    {
+        var settings = TraySettings.Default with
+        {
+            AppearanceMemoryMode = OverlayAppearanceMemoryMode.RememberPerDisplay,
+            SharedAppearance = new OverlayAppearanceState(
+                OverlayThemePreference.Dark,
+                OverlayOpacityPreference.Percent70)
+        };
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        Assert.True(store.TrySave(settings));
+
+        string json = File.ReadAllText(_settingsPath);
+        Assert.Contains("\"AppearanceMemoryMode\"", json);
+        Assert.Contains("\"SharedAppearance\"", json);
+        Assert.Contains("\"ThemePreference\"", json);
+        Assert.Contains("\"OpacityPreference\"", json);
+
+        var loaded = Load();
+
+        Assert.Equal(
+            OverlayAppearanceMemoryMode.RememberPerDisplay,
+            loaded.AppearanceMemoryMode);
+        Assert.NotNull(loaded.SharedAppearance);
+        Assert.Equal(
+            OverlayThemePreference.Dark,
+            loaded.SharedAppearance!.ThemePreference);
+        Assert.Equal(
+            OverlayOpacityPreference.Percent70,
+            loaded.SharedAppearance.OpacityPreference);
+    }
+
+    [Fact]
+    public void AppearanceMemory_PerDisplayAppearancesRoundTrip()
+    {
+        var primaryId = "physical-primary";
+        var secondaryId = "physical-secondary";
+        var settings = TraySettings.Default with
+        {
+            AppearanceMemoryMode = OverlayAppearanceMemoryMode.RememberPerDisplay,
+            SharedAppearance = new OverlayAppearanceState(
+                OverlayThemePreference.Light,
+                OverlayOpacityPreference.Default),
+            PerDisplayAppearances = new Dictionary<string, OverlayAppearanceState>
+            {
+                [primaryId] = new OverlayAppearanceState(
+                    OverlayThemePreference.Dark,
+                    OverlayOpacityPreference.Percent85),
+                [secondaryId] = new OverlayAppearanceState(
+                    OverlayThemePreference.FollowApplication,
+                    OverlayOpacityPreference.Opaque)
+            }
+        };
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        Assert.True(store.TrySave(settings));
+
+        var loaded = Load();
+
+        Assert.Equal(
+            OverlayAppearanceMemoryMode.RememberPerDisplay,
+            loaded.AppearanceMemoryMode);
+        Assert.NotNull(loaded.PerDisplayAppearances);
+        Assert.Equal(
+            OverlayThemePreference.Dark,
+            loaded.PerDisplayAppearances![primaryId].ThemePreference);
+        Assert.Equal(
+            OverlayOpacityPreference.Percent85,
+            loaded.PerDisplayAppearances[primaryId].OpacityPreference);
+        Assert.Equal(
+            OverlayThemePreference.FollowApplication,
+            loaded.PerDisplayAppearances[secondaryId].ThemePreference);
+        Assert.Equal(
+            OverlayOpacityPreference.Opaque,
+            loaded.PerDisplayAppearances[secondaryId].OpacityPreference);
+    }
+
+    [Fact]
+    public void AppearanceMemory_LegacyV041_MigratesSharedAppearanceFromScalars()
+    {
+        Write(
+            "{\"OverlayTheme\":\"Dark\",\"OverlayOpacity\":\"Percent70\"}");
+
+        var settings = Load();
+
+        Assert.Equal(
+            OverlayAppearanceMemoryMode.SharedAcrossDisplays,
+            settings.AppearanceMemoryMode);
+        Assert.NotNull(settings.SharedAppearance);
+        Assert.Equal(
+            OverlayThemePreference.Dark,
+            settings.SharedAppearance!.ThemePreference);
+        Assert.Equal(
+            OverlayOpacityPreference.Percent70,
+            settings.SharedAppearance.OpacityPreference);
+        Assert.Null(settings.PerDisplayAppearances);
+    }
+
+    [Fact]
+    public void AppearanceMemory_LegacyV041_FollowApplicationAndSystem_PreservedAsPreferences()
+    {
+        Write(
+            "{\"OverlayTheme\":\"FollowApplication\",\"OverlayOpacity\":\"Default\"}");
+
+        var settings = Load();
+
+        Assert.NotNull(settings.SharedAppearance);
+        Assert.Equal(
+            OverlayThemePreference.FollowApplication,
+            settings.SharedAppearance!.ThemePreference);
+        Assert.Equal(
+            OverlayOpacityPreference.Default,
+            settings.SharedAppearance.OpacityPreference);
+    }
+
+    [Fact]
+    public void AppearanceMemory_InvalidModeFallsBackToSharedAcrossDisplays()
+    {
+        Write(
+            "{\"AppearanceMemoryMode\":\"Bogus\"," +
+            "\"SharedAppearance\":{\"ThemePreference\":\"Light\",\"OpacityPreference\":\"Percent40\"}}");
+
+        var settings = Load();
+
+        Assert.Equal(
+            OverlayAppearanceMemoryMode.SharedAcrossDisplays,
+            settings.AppearanceMemoryMode);
+        Assert.NotNull(settings.SharedAppearance);
+        Assert.Equal(
+            OverlayThemePreference.Light,
+            settings.SharedAppearance!.ThemePreference);
+    }
+
+    [Fact]
+    public void AppearanceMemory_InvalidSharedAppearanceFallsBackToScalarMigration()
+    {
+        Write(
+            "{\"OverlayTheme\":\"Dark\",\"OverlayOpacity\":\"Opaque\"," +
+            "\"SharedAppearance\":{\"ThemePreference\":\"NotATheme\"}}");
+
+        var settings = Load();
+
+        Assert.Equal(
+            OverlayThemePreference.Dark,
+            settings.OverlayTheme);
+        Assert.Equal(
+            OverlayOpacityPreference.Opaque,
+            settings.OverlayOpacity);
+        Assert.NotNull(settings.SharedAppearance);
+        Assert.Equal(
+            OverlayThemePreference.Dark,
+            settings.SharedAppearance!.ThemePreference);
+        Assert.Equal(
+            OverlayOpacityPreference.Opaque,
+            settings.SharedAppearance.OpacityPreference);
+    }
+
+    [Fact]
+    public void AppearanceMemory_InvalidPerDisplayEntriesAreSkipped()
+    {
+        Write(
+            "{\"AppearanceMemoryMode\":\"RememberPerDisplay\"," +
+            "\"SharedAppearance\":{\"ThemePreference\":\"Light\",\"OpacityPreference\":\"Default\"}," +
+            "\"PerDisplayAppearances\":{" +
+            "\"valid\":{\"ThemePreference\":\"Dark\",\"OpacityPreference\":\"Percent70\"}," +
+            "\"invalid\":{\"ThemePreference\":\"NotATheme\",\"OpacityPreference\":\"Percent70\"}}}");
+
+        var settings = Load();
+
+        Assert.Equal(
+            OverlayAppearanceMemoryMode.RememberPerDisplay,
+            settings.AppearanceMemoryMode);
+        Assert.NotNull(settings.PerDisplayAppearances);
+        Assert.True(settings.PerDisplayAppearances!.ContainsKey("valid"));
+        Assert.False(settings.PerDisplayAppearances.ContainsKey("invalid"));
+        Assert.Equal(
+            OverlayThemePreference.Dark,
+            settings.PerDisplayAppearances["valid"].ThemePreference);
+    }
+
+    [Fact]
+    public void AppearanceMemory_SaveRoundTripPreservesFollowApplicationPreference()
+    {
+        var settings = TraySettings.Default with
+        {
+            SharedAppearance = new OverlayAppearanceState(
+                OverlayThemePreference.FollowApplication,
+                OverlayOpacityPreference.Default)
+        };
+
+        var store = TraySettingsStore.CreateForTests(_settingsPath);
+        Assert.True(store.TrySave(settings));
+
+        var loaded = Load();
+
+        Assert.NotNull(loaded.SharedAppearance);
+        Assert.Equal(
+            OverlayThemePreference.FollowApplication,
+            loaded.SharedAppearance!.ThemePreference);
+        Assert.Equal(
+            OverlayOpacityPreference.Default,
+            loaded.SharedAppearance.OpacityPreference);
+    }
 }

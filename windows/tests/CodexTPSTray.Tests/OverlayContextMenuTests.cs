@@ -61,6 +61,7 @@ public class OverlayContextMenuTests
         public List<OverlayOpacityPreference> SelectOpacityCalls { get; } = new();
         public List<OverlayThemePreference> SelectThemeCalls { get; } = new();
         public List<OverlayPositionMemoryMode> SelectPositionMemoryModeCalls { get; } = new();
+        public List<OverlayAppearanceMemoryMode> SelectAppearanceMemoryModeCalls { get; } = new();
 
         public void ToggleOverlay(bool enabled) => ToggleOverlayCalls.Add(enabled);
         public void ToggleLock(bool locked) => ToggleLockCalls.Add(locked);
@@ -68,6 +69,7 @@ public class OverlayContextMenuTests
         public void SelectOpacity(OverlayOpacityPreference opacity) => SelectOpacityCalls.Add(opacity);
         public void SelectTheme(OverlayThemePreference theme) => SelectThemeCalls.Add(theme);
         public void SelectPositionMemoryMode(OverlayPositionMemoryMode mode) => SelectPositionMemoryModeCalls.Add(mode);
+        public void SelectAppearanceMemoryMode(OverlayAppearanceMemoryMode mode) => SelectAppearanceMemoryModeCalls.Add(mode);
     }
 
     private sealed class TestMenuStateProvider : IOverlayMenuStateProvider
@@ -116,6 +118,13 @@ public class OverlayContextMenuTests
     {
         var expected = Enum.GetValues<OverlayPositionMemoryMode>().ToList();
         Assert.Equal(expected, OverlayMenuDefinition.PositionMemoryModes);
+    }
+
+    [Fact]
+    public void OverlayMenuDefinition_AppearanceMemoryModes_MatchesEnumValues()
+    {
+        var expected = Enum.GetValues<OverlayAppearanceMemoryMode>().ToList();
+        Assert.Equal(expected, OverlayMenuDefinition.AppearanceMemoryModes);
     }
 
     [Fact]
@@ -226,6 +235,8 @@ public class OverlayContextMenuTests
             Assert.Empty(handler.SelectPositionCalls);
             Assert.Empty(handler.SelectOpacityCalls);
             Assert.Empty(handler.SelectThemeCalls);
+            Assert.Empty(handler.SelectPositionMemoryModeCalls);
+            Assert.Empty(handler.SelectAppearanceMemoryModeCalls);
         });
     }
 
@@ -369,13 +380,13 @@ public class OverlayContextMenuTests
             Assert.Equal("LockOverlayMenuItem", ((WpfMenuItem)items[1]).Name);
             Assert.IsType<Separator>(items[2]);
             Assert.IsType<WpfMenuItem>(items[3]);
-            Assert.Equal("PositionSubmenu", ((WpfMenuItem)items[3]).Name);
+            Assert.Equal("ThemeSubmenu", ((WpfMenuItem)items[3]).Name);
             Assert.IsType<WpfMenuItem>(items[4]);
-            Assert.Equal("PositionMemorySubmenu", ((WpfMenuItem)items[4]).Name);
+            Assert.Equal("OpacitySubmenu", ((WpfMenuItem)items[4]).Name);
             Assert.IsType<WpfMenuItem>(items[5]);
-            Assert.Equal("OpacitySubmenu", ((WpfMenuItem)items[5]).Name);
+            Assert.Equal("PositionSubmenu", ((WpfMenuItem)items[5]).Name);
             Assert.IsType<WpfMenuItem>(items[6]);
-            Assert.Equal("ThemeSubmenu", ((WpfMenuItem)items[6]).Name);
+            Assert.Equal("MemorySubmenu", ((WpfMenuItem)items[6]).Name);
         });
     }
 
@@ -488,7 +499,7 @@ public class OverlayContextMenuTests
             window.UpdateSettings(state.CurrentSettings);
             window.UpdateContextMenuState();
 
-            Assert.Equal("Position Memory", ((WpfMenuItem)window.FindName("PositionMemorySubmenu")!).Header);
+            Assert.Equal("Position", ((WpfMenuItem)window.FindName("PositionMemorySubmenu")!).Header);
             Assert.Equal("Shared across displays", ((WpfMenuItem)window.FindName("PositionMemoryShared")!).Header);
             Assert.Equal("Remember per display", ((WpfMenuItem)window.FindName("PositionMemoryRememberPerDisplay")!).Header);
         });
@@ -508,7 +519,7 @@ public class OverlayContextMenuTests
             window.UpdateSettings(state.CurrentSettings);
             window.UpdateContextMenuState();
 
-            Assert.Equal("位置记忆", ((WpfMenuItem)window.FindName("PositionMemorySubmenu")!).Header);
+            Assert.Equal("位置", ((WpfMenuItem)window.FindName("PositionMemorySubmenu")!).Header);
             Assert.Equal("跨屏共用", ((WpfMenuItem)window.FindName("PositionMemoryShared")!).Header);
             Assert.Equal("按显示器记忆", ((WpfMenuItem)window.FindName("PositionMemoryRememberPerDisplay")!).Header);
         });
@@ -665,6 +676,163 @@ public class OverlayContextMenuTests
     }
 
     [Fact]
+    public void MemorySubmenu_HasBothChildrenInOrder()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = CreateTestWindow();
+            var sub = (WpfMenuItem)window.FindName("MemorySubmenu")!;
+            var children = sub.Items.Cast<WpfMenuItem>().ToList();
+
+            Assert.Equal(2, children.Count);
+            Assert.Equal("AppearanceMemorySubmenu", children[0].Name);
+            Assert.Equal("PositionMemorySubmenu", children[1].Name);
+        });
+    }
+
+    [Fact]
+    public void AppearanceMemorySubmenu_HasBothModesInOrder()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var window = CreateTestWindow();
+            var sub = (WpfMenuItem)window.FindName("AppearanceMemorySubmenu")!;
+            var children = sub.Items.Cast<WpfMenuItem>().ToList();
+
+            Assert.Equal(2, children.Count);
+            Assert.Equal("AppearanceMemoryShared", children[0].Name);
+            Assert.Equal("AppearanceMemoryRememberPerDisplay", children[1].Name);
+        });
+    }
+
+    [Fact]
+    public void AppearanceMemorySubmenu_Shared_CheckedByDefault()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var state = new TestMenuStateProvider
+            {
+                CurrentSettings = TraySettings.Default with { AppearanceMemoryMode = OverlayAppearanceMemoryMode.SharedAcrossDisplays },
+                IsOverlayVisible = true
+            };
+            var window = CreateTestWindow(stateProvider: state);
+            window.UpdateSettings(state.CurrentSettings);
+            window.UpdateContextMenuState();
+
+            var shared = (WpfMenuItem)window.FindName("AppearanceMemoryShared")!;
+            var remember = (WpfMenuItem)window.FindName("AppearanceMemoryRememberPerDisplay")!;
+
+            Assert.True(shared.IsChecked);
+            Assert.False(remember.IsChecked);
+        });
+    }
+
+    [Fact]
+    public void AppearanceMemorySubmenu_RememberPerDisplay_CheckedWhenSelected()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var state = new TestMenuStateProvider
+            {
+                CurrentSettings = TraySettings.Default with { AppearanceMemoryMode = OverlayAppearanceMemoryMode.RememberPerDisplay },
+                IsOverlayVisible = true
+            };
+            var window = CreateTestWindow(stateProvider: state);
+            window.UpdateSettings(state.CurrentSettings);
+            window.UpdateContextMenuState();
+
+            var shared = (WpfMenuItem)window.FindName("AppearanceMemoryShared")!;
+            var remember = (WpfMenuItem)window.FindName("AppearanceMemoryRememberPerDisplay")!;
+
+            Assert.False(shared.IsChecked);
+            Assert.True(remember.IsChecked);
+        });
+    }
+
+    [Fact]
+    public void AppearanceMemorySubmenu_ClickRememberPerDisplay_FiresCommand()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var handler = new CapturingMenuCommandHandler();
+            var window = CreateTestWindow(handler: handler);
+            window.UpdateSettings(TraySettings.Default);
+
+            var remember = (WpfMenuItem)window.FindName("AppearanceMemoryRememberPerDisplay")!;
+            remember.IsChecked = true;
+            remember.RaiseEvent(new RoutedEventArgs(WpfMenuItem.ClickEvent, remember));
+
+            Assert.Single(handler.SelectAppearanceMemoryModeCalls);
+            Assert.Equal(OverlayAppearanceMemoryMode.RememberPerDisplay, handler.SelectAppearanceMemoryModeCalls[0]);
+        });
+    }
+
+    [Fact]
+    public void AppearanceMemorySubmenu_HeaderLocalization_English()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var state = new TestMenuStateProvider
+            {
+                CurrentSettings = TraySettings.Default with { Language = Language.English },
+                IsOverlayVisible = true
+            };
+            var window = CreateTestWindow(stateProvider: state);
+            window.UpdateSettings(state.CurrentSettings);
+            window.UpdateContextMenuState();
+
+            Assert.Equal("Memory", ((WpfMenuItem)window.FindName("MemorySubmenu")!).Header);
+            Assert.Equal("Appearance", ((WpfMenuItem)window.FindName("AppearanceMemorySubmenu")!).Header);
+            Assert.Equal("Shared across displays", ((WpfMenuItem)window.FindName("AppearanceMemoryShared")!).Header);
+            Assert.Equal("Remember per display", ((WpfMenuItem)window.FindName("AppearanceMemoryRememberPerDisplay")!).Header);
+        });
+    }
+
+    [Fact]
+    public void AppearanceMemorySubmenu_HeaderLocalization_Chinese()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            var state = new TestMenuStateProvider
+            {
+                CurrentSettings = TraySettings.Default with { Language = Language.Chinese },
+                IsOverlayVisible = true
+            };
+            var window = CreateTestWindow(stateProvider: state);
+            window.UpdateSettings(state.CurrentSettings);
+            window.UpdateContextMenuState();
+
+            Assert.Equal("记忆", ((WpfMenuItem)window.FindName("MemorySubmenu")!).Header);
+            Assert.Equal("外观", ((WpfMenuItem)window.FindName("AppearanceMemorySubmenu")!).Header);
+            Assert.Equal("跨屏共用", ((WpfMenuItem)window.FindName("AppearanceMemoryShared")!).Header);
+            Assert.Equal("按显示器记忆", ((WpfMenuItem)window.FindName("AppearanceMemoryRememberPerDisplay")!).Header);
+        });
+    }
+
+    [Fact]
+    public void CheckState_AppearanceMemoryModes_SyncCheckmarks()
+    {
+        WpfTestHelpers.RunInStaWithWpf(() =>
+        {
+            foreach (var targetMode in OverlayMenuDefinition.AppearanceMemoryModes)
+            {
+                var stateProvider = new TestMenuStateProvider
+                {
+                    CurrentSettings = TraySettings.Default with { AppearanceMemoryMode = targetMode },
+                    IsOverlayVisible = true
+                };
+                var window = CreateTestWindow(stateProvider: stateProvider);
+                window.UpdateContextMenuState();
+
+                var shared = (WpfMenuItem)window.FindName("AppearanceMemoryShared")!;
+                var perDisplay = (WpfMenuItem)window.FindName("AppearanceMemoryRememberPerDisplay")!;
+                Assert.Equal(targetMode == OverlayAppearanceMemoryMode.SharedAcrossDisplays, shared.IsChecked);
+                Assert.Equal(targetMode == OverlayAppearanceMemoryMode.RememberPerDisplay, perDisplay.IsChecked);
+            }
+        });
+    }
+
+    [Fact]
     public void CheckState_AllOpacityOptions_SyncCheckmarks()
     {
         WpfTestHelpers.RunInStaWithWpf(() =>
@@ -730,6 +898,9 @@ public class OverlayContextMenuTests
             Assert.Equal("Position", ((WpfMenuItem)window.FindName("PositionSubmenu")!).Header);
             Assert.Equal("Background Opacity", ((WpfMenuItem)window.FindName("OpacitySubmenu")!).Header);
             Assert.Equal("Theme", ((WpfMenuItem)window.FindName("ThemeSubmenu")!).Header);
+            Assert.Equal("Memory", ((WpfMenuItem)window.FindName("MemorySubmenu")!).Header);
+            Assert.Equal("Appearance", ((WpfMenuItem)window.FindName("AppearanceMemorySubmenu")!).Header);
+            Assert.Equal("Position", ((WpfMenuItem)window.FindName("PositionMemorySubmenu")!).Header);
         });
     }
 
@@ -751,6 +922,9 @@ public class OverlayContextMenuTests
             Assert.Equal("位置", ((WpfMenuItem)window.FindName("PositionSubmenu")!).Header);
             Assert.Equal("背景不透明度", ((WpfMenuItem)window.FindName("OpacitySubmenu")!).Header);
             Assert.Equal("主题", ((WpfMenuItem)window.FindName("ThemeSubmenu")!).Header);
+            Assert.Equal("记忆", ((WpfMenuItem)window.FindName("MemorySubmenu")!).Header);
+            Assert.Equal("外观", ((WpfMenuItem)window.FindName("AppearanceMemorySubmenu")!).Header);
+            Assert.Equal("位置", ((WpfMenuItem)window.FindName("PositionMemorySubmenu")!).Header);
         });
     }
 
@@ -1082,6 +1256,7 @@ public class OverlayContextMenuTests
             Assert.IsNotType<System.Windows.Controls.Separator>(items[3]);
             Assert.IsNotType<System.Windows.Controls.Separator>(items[4]);
             Assert.IsNotType<System.Windows.Controls.Separator>(items[5]);
+            Assert.IsNotType<System.Windows.Controls.Separator>(items[6]);
         });
     }
 

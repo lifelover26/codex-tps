@@ -75,6 +75,7 @@ public partial class OverlayWindow : Window
     private readonly Dictionary<OverlayOpacityPreference, WpfMenuItem> _opacityMenuItems = new();
     private readonly Dictionary<OverlayThemePreference, WpfMenuItem> _themeMenuItems = new();
     private readonly Dictionary<OverlayPositionMemoryMode, WpfMenuItem> _positionMemoryModeMenuItems = new();
+    private readonly Dictionary<OverlayAppearanceMemoryMode, WpfMenuItem> _appearanceMemoryModeMenuItems = new();
 
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -227,6 +228,9 @@ public partial class OverlayWindow : Window
 
         _positionMemoryModeMenuItems[OverlayPositionMemoryMode.SharedAcrossDisplays] = PositionMemoryShared;
         _positionMemoryModeMenuItems[OverlayPositionMemoryMode.RememberPerDisplay] = PositionMemoryRememberPerDisplay;
+
+        _appearanceMemoryModeMenuItems[OverlayAppearanceMemoryMode.SharedAcrossDisplays] = AppearanceMemoryShared;
+        _appearanceMemoryModeMenuItems[OverlayAppearanceMemoryMode.RememberPerDisplay] = AppearanceMemoryRememberPerDisplay;
     }
 
     internal void SetOverlayMenuCommandHandler(IOverlayMenuCommandHandler handler)
@@ -291,6 +295,11 @@ public partial class OverlayWindow : Window
             _positionMemoryModeMenuItems[mode].IsChecked = mode == settings.PositionMemoryMode;
         }
 
+        foreach (var mode in OverlayMenuDefinition.AppearanceMemoryModes)
+        {
+            _appearanceMemoryModeMenuItems[mode].IsChecked = mode == settings.AppearanceMemoryMode;
+        }
+
         UpdateMenuLocalization(settings.Language);
     }
 
@@ -347,7 +356,9 @@ public partial class OverlayWindow : Window
         ShowOverlayMenuItem.Header = Localization.ShowOverlayMenu(language);
         LockOverlayMenuItem.Header = Localization.LockOverlayMenu(language);
         PositionSubmenu.Header = Localization.PositionMenu(language);
-        PositionMemorySubmenu.Header = Localization.PositionMemoryMenu(language);
+        MemorySubmenu.Header = Localization.MemoryMenu(language);
+        AppearanceMemorySubmenu.Header = Localization.AppearanceMemoryMenu(language);
+        PositionMemorySubmenu.Header = Localization.PositionMenu(language);
         OpacitySubmenu.Header = Localization.BackgroundOpacityMenu(language);
         ThemeSubmenu.Header = Localization.OverlayThemeMenu(language);
 
@@ -369,6 +380,11 @@ public partial class OverlayWindow : Window
         foreach (var mode in OverlayMenuDefinition.PositionMemoryModes)
         {
             _positionMemoryModeMenuItems[mode].Header = OverlayMenuDefinition.GetPositionMemoryModeText(mode, language);
+        }
+
+        foreach (var mode in OverlayMenuDefinition.AppearanceMemoryModes)
+        {
+            _appearanceMemoryModeMenuItems[mode].Header = OverlayMenuDefinition.GetAppearanceMemoryModeText(mode, language);
         }
     }
 
@@ -453,6 +469,23 @@ public partial class OverlayWindow : Window
             if (kvp.Value == item)
             {
                 _menuCommandHandler.SelectPositionMemoryMode(kvp.Key);
+                return;
+            }
+        }
+    }
+
+    private void OnAppearanceMemoryModeClicked(object sender, RoutedEventArgs e)
+    {
+        if (_menuCommandHandler == null || _isLocked || _isShuttingDown || sender is not WpfMenuItem item)
+            return;
+
+        OverlayContextMenu.IsOpen = false;
+
+        foreach (var kvp in _appearanceMemoryModeMenuItems)
+        {
+            if (kvp.Value == item)
+            {
+                _menuCommandHandler.SelectAppearanceMemoryMode(kvp.Key);
                 return;
             }
         }
@@ -559,6 +592,31 @@ public partial class OverlayWindow : Window
         EnsureTopmost();
     }
 
+    /// <summary>
+    /// Applies theme and opacity as a single coordinated state. Theme resources
+    /// are rebuilt only when the effective theme actually changes; opacity is
+    /// re-applied once against the final theme so there is no intermediate
+    /// flicker. Returns immediately when neither value changed, avoiding
+    /// redundant resource rebuilds or border re-application.
+    /// </summary>
+    internal void ApplyAppearance(EffectiveTheme theme, OverlayOpacityPreference opacity)
+    {
+        bool themeChanged = _currentTheme != theme;
+        bool opacityChanged = _currentOpacity != opacity;
+        if (!themeChanged && !opacityChanged)
+            return;
+
+        if (themeChanged)
+        {
+            _currentTheme = theme;
+            OverlayThemeResources.Apply(Resources, theme);
+        }
+
+        _currentOpacity = opacity;
+        ApplyOpacityToBorder();
+        QueueWindowSizeNormalization(forceLayout: false);
+    }
+
     internal void ApplyTheme(EffectiveTheme theme)
     {
         if (_currentTheme == theme)
@@ -572,6 +630,9 @@ public partial class OverlayWindow : Window
 
     public void ApplyOpacity(OverlayOpacityPreference preference)
     {
+        if (_currentOpacity == preference)
+            return;
+
         _currentOpacity = preference;
         ApplyOpacityToBorder();
         QueueWindowSizeNormalization(forceLayout: false);

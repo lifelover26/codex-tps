@@ -408,4 +408,73 @@ public class LocalizationTests
             Assert.True(cn.Length <= 16, $"Chinese label too long: {cn}");
         }
     }
+
+    [Fact]
+    public void MemoryMenu_English()
+    {
+        Assert.Equal("Memory", Localization.MemoryMenu(Language.English));
+    }
+
+    [Fact]
+    public void MemoryMenu_Chinese()
+    {
+        Assert.Equal("记忆", Localization.MemoryMenu(Language.Chinese));
+    }
+
+    [Fact]
+    public void AppearanceMemoryMenu_English()
+    {
+        Assert.Equal("Appearance", Localization.AppearanceMemoryMenu(Language.English));
+    }
+
+    [Fact]
+    public void AppearanceMemoryMenu_Chinese()
+    {
+        Assert.Equal("外观", Localization.AppearanceMemoryMenu(Language.Chinese));
+    }
+
+    [Fact]
+    public void GetAppearanceMemoryModeDisplayName_Shared_English()
+    {
+        Assert.Equal("Shared across displays", Localization.GetAppearanceMemoryModeDisplayName(OverlayAppearanceMemoryMode.SharedAcrossDisplays, Language.English));
+    }
+
+    [Fact]
+    public void GetAppearanceMemoryModeDisplayName_Shared_Chinese()
+    {
+        Assert.Equal("跨屏共用", Localization.GetAppearanceMemoryModeDisplayName(OverlayAppearanceMemoryMode.SharedAcrossDisplays, Language.Chinese));
+    }
+
+    [Fact]
+    public void GetAppearanceMemoryModeDisplayName_RememberPerDisplay_English()
+    {
+        Assert.Equal("Remember per display", Localization.GetAppearanceMemoryModeDisplayName(OverlayAppearanceMemoryMode.RememberPerDisplay, Language.English));
+    }
+
+    [Fact]
+    public void GetAppearanceMemoryModeDisplayName_RememberPerDisplay_Chinese()
+    {
+        Assert.Equal("按显示器记忆", Localization.GetAppearanceMemoryModeDisplayName(OverlayAppearanceMemoryMode.RememberPerDisplay, Language.Chinese));
+    }
+
+    [Fact]
+    public void GetAppearanceMemoryModeDisplayName_Unknown_FallsBackToShared()
+    {
+        Assert.Equal("Shared across displays", Localization.GetAppearanceMemoryModeDisplayName((OverlayAppearanceMemoryMode)99, Language.English));
+        Assert.Equal("跨屏共用", Localization.GetAppearanceMemoryModeDisplayName((OverlayAppearanceMemoryMode)99, Language.Chinese));
+    }
+
+    [Fact]
+    public void AppearanceMemoryModeLabels_AreConciseAndNonEmpty()
+    {
+        foreach (OverlayAppearanceMemoryMode mode in Enum.GetValues<OverlayAppearanceMemoryMode>())
+        {
+            string en = Localization.GetAppearanceMemoryModeDisplayName(mode, Language.English);
+            string cn = Localization.GetAppearanceMemoryModeDisplayName(mode, Language.Chinese);
+            Assert.False(string.IsNullOrWhiteSpace(en));
+            Assert.False(string.IsNullOrWhiteSpace(cn));
+            Assert.True(en.Length <= 32, $"English label too long: {en}");
+            Assert.True(cn.Length <= 16, $"Chinese label too long: {cn}");
+        }
+    }
 }

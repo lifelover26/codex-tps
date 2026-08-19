@@ -45,6 +45,19 @@ namespace CodexTPSTray;
 // only as on-disk keys read by TraySettingsStore's one-time migration; they
 // are gone from the in-memory model so they can never compete with the new
 // fields as a second authority.
+//
+// Overlay appearance model (single authority, parallel to position):
+// - AppearanceMemoryMode: SharedAcrossDisplays or RememberPerDisplay.
+// - SharedAppearance: the single full OverlayAppearanceState used by every
+//   display in shared mode, and the inheritance source for first-seen
+//   displays in per-display mode. Migrated from OverlayTheme/OverlayOpacity
+//   when a pre-v0.4.2 file has no appearance memory fields.
+// - PerDisplayAppearances: MonitorId -> full OverlayAppearanceState per
+//   physical display, used in per-display mode.
+// OverlayTheme and OverlayOpacity remain as the effective scalar values for
+// the current monitor (read by the theme application pipeline and written for
+// downgrade compatibility); OverlayAppearanceCoordinator keeps them in sync
+// with the effective appearance whenever memory state changes.
 public record TraySettings(
     MetricWindow SelectedWindow,
     RefreshCadence RefreshCadence,
@@ -60,7 +73,10 @@ public record TraySettings(
     OverlayPositionState? SharedPosition = null,
     IReadOnlyDictionary<string, OverlayPositionState>? PerDisplayPositions = null,
     string? OverlayTargetMonitorId = null,
-    string? PendingPresetMigrationTarget = null
+    string? PendingPresetMigrationTarget = null,
+    OverlayAppearanceMemoryMode AppearanceMemoryMode = OverlayAppearanceMemoryMode.SharedAcrossDisplays,
+    OverlayAppearanceState? SharedAppearance = null,
+    IReadOnlyDictionary<string, OverlayAppearanceState>? PerDisplayAppearances = null
 )
 {
     // Backing field for DataSource. The initializer guarantees a valid Windows
@@ -80,11 +96,10 @@ public record TraySettings(
             value ?? throw new ArgumentNullException(nameof(DataSource));
     }
 
-    // Full constructor: every positional field plus an explicit DataSource.
-    // Used by TraySettingsStore when materializing persisted settings and by
-    // tests that need a WSL selection. Forwards to the primary constructor
-    // then sets DataSource through its init accessor so the null-rejection
-    // logic lives in exactly one place.
+    // Compatibility constructor: the pre-v0.4.2 call shape used by existing
+    // tests and call sites that pass every field up to OverlayTargetMonitorId
+    // and then an explicit DataSource. Forwards to the primary constructor
+    // with null/defaults for the fields those callers do not know about.
     public TraySettings(
         MetricWindow SelectedWindow,
         RefreshCadence RefreshCadence,
@@ -115,7 +130,60 @@ public record TraySettings(
             PositionMemoryMode,
             SharedPosition,
             PerDisplayPositions,
-            OverlayTargetMonitorId)
+            OverlayTargetMonitorId,
+            PendingPresetMigrationTarget: null,
+            AppearanceMemoryMode: OverlayAppearanceMemoryMode.SharedAcrossDisplays,
+            SharedAppearance: null,
+            PerDisplayAppearances: null)
+    {
+        this.DataSource = DataSource;
+    }
+
+    // Full constructor: every positional field including appearance memory and
+    // PendingPresetMigrationTarget, plus an explicit DataSource. Used by
+    // TraySettingsStore when materializing persisted settings and by tests that
+    // need the complete field set with a WSL selection. Forwards to the primary
+    // constructor then sets DataSource through its init accessor so the
+    // null-rejection logic lives in exactly one place.
+    public TraySettings(
+        MetricWindow SelectedWindow,
+        RefreshCadence RefreshCadence,
+        Language Language,
+        bool OverlayEnabled,
+        bool OverlayLocked,
+        double? OverlayLeft,
+        double? OverlayTop,
+        ApplicationThemePreference ApplicationTheme,
+        OverlayThemePreference OverlayTheme,
+        OverlayOpacityPreference OverlayOpacity,
+        OverlayPositionMemoryMode PositionMemoryMode,
+        OverlayPositionState? SharedPosition,
+        IReadOnlyDictionary<string, OverlayPositionState>? PerDisplayPositions,
+        string? OverlayTargetMonitorId,
+        string? PendingPresetMigrationTarget,
+        OverlayAppearanceMemoryMode AppearanceMemoryMode,
+        OverlayAppearanceState? SharedAppearance,
+        IReadOnlyDictionary<string, OverlayAppearanceState>? PerDisplayAppearances,
+        CodexDataSourceSelection DataSource)
+        : this(
+            SelectedWindow,
+            RefreshCadence,
+            Language,
+            OverlayEnabled,
+            OverlayLocked,
+            OverlayLeft,
+            OverlayTop,
+            ApplicationTheme,
+            OverlayTheme,
+            OverlayOpacity,
+            PositionMemoryMode,
+            SharedPosition,
+            PerDisplayPositions,
+            OverlayTargetMonitorId,
+            PendingPresetMigrationTarget,
+            AppearanceMemoryMode,
+            SharedAppearance,
+            PerDisplayAppearances)
     {
         this.DataSource = DataSource;
     }
